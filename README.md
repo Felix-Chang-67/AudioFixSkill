@@ -1,0 +1,263 @@
+# AudioFixSkill · 低质量 Live 音频修复
+
+把低质量的现场录音修复到接近录音室的听感。适用于演唱会歌曲、MC（舞台讲话），以及两者混在一起的整场录音。
+
+它不是"一键套效果"，流程是：
+
+1. **判断**：测量哪里坏了，每个结论都附测量数字。
+2. **计划**：按证据生成一份能人工修改的修复计划，每一步都写明"为什么"。
+3. **修复**：按计划渲染。
+4. **验证**：用客观指标检查，再生成响度对齐的 A/B 试听文件交给人耳确认。
+
+它是一个 AI skill，Claude、ChatGPT、Codex、Gemini、Cursor 等都能用；也是一个普通的命令行工具，没有 AI 也能直接跑。
+
+> skill 本体在 [`skills/live-audio-restore/`](skills/live-audio-restore/)。AI 读 [`SKILL.md`](skills/live-audio-restore/SKILL.md)，人读这份 README 就够了。
+
+---
+
+## 适用素材
+
+- **来源**：电视/广播转录、B 站/YouTube 搬运的老演出、观众席手机或录音笔录音。
+- **歌曲的问题**：
+  - 过度压限：糊成一片，鼓没有冲击力。
+  - 反相层：相位怪，手机外放时某个乐器消失。
+  - 音色问题：闷、刺耳、单薄。
+  - 编码器砍掉的高频：16 kHz 以上一片空白。
+  - 交流哼声、削波。
+- **MC 的问题**：
+  - 讲话声音小。
+  - 观众欢呼盖过讲话。
+  - 混响重、低频轰鸣。
+  - 经过扩声（PA）后人声单薄。
+
+## 实测效果
+
+| 素材 | 判断出的问题 | 修复后（全部来自自动验证） |
+|---|---|---|
+| 2015 年电视转播 Live，8 分 36 秒，2 首歌 | 重度压限（响度范围 0.65 LU，峰值/响度比 8.8 dB）；吉他层中频反相（最差相关性 -0.49）；AAC 在 15.5 kHz 截止；人声刺耳（5–8 kHz 高出参考 5–8 dB）；低频不足 | 与参考音色的偏差 4.09 → 1.28 dB；3 秒峰值因数 10.9 → 12.3 dB（动态更开）；中频相关性 -0.49 → -0.12；单声道损失 -1.61 → -0.76 dB；带宽 15.5 → 19.3 kHz。**6/6 项检查通过** |
+| 观众录音的日语 MC，3 分 23 秒 | 句间欢呼比讲话还响：中位数高 5.6 dB，最响的 10 % 高 20.9 dB；整体只有 -24.6 LUFS，忽大忽小（响度范围 24.8 LU） | 句间欢呼降到讲话之下：中位数 -2.6 dB，最响的 10 % -1.4 dB；Whisper 对讲话的识别量基本不变（按置信度加权的词量 281 → 286），平均置信度 -0.52 → -0.46，说明没有损伤人声；-16.1 LUFS，响度范围 4.8 LU。**5/5** |
+| 歌 → MC → 歌 的混合文件 | 自动分段，边界误差 1–3 秒 | 两条路径各自处理后用 1 秒交叉淡化拼接。**9/9** |
+| 合成的"广播歌曲"和"欢呼盖过讲话的 MC"测试片段 | 预埋的问题全部判断正确 | **6/6、5/5** |
+| 没有音轨分离、没有 numba 的降级环境 | — | **6/6** |
+
+**可复现性。** 第一行那段音频此前做过一版手工精修，也就是本 skill 的原型。现在用 skill 全自动重跑，结果与手工版几乎一致：
+
+| | 手工精修版 | skill 自动结果 |
+|---|---|---|
+| 响度 | -10.61 LUFS | -10.61 LUFS |
+| 峰值/响度比 | 9.52 dB | 9.51 dB |
+| 3 秒峰值因数 | 12.27 dB | 12.25 dB |
+| 长期频谱差（50 Hz–16 kHz） | — | 0.13 dB RMS |
+
+修复阶段处理 8 分半的音频约 3 分钟。音轨分离和去压限结果会缓存，改参数后重新渲染不用重跑这两步。
+
+---
+
+## 安装
+
+```bash
+git clone https://github.com/Felix-Chang-67/AudioFixSkill.git
+cd AudioFixSkill/skills/live-audio-restore
+bash scripts/setup.sh          # 装好缺的东西，最后自动运行 check
+```
+
+- **必需**：Python 3.9+。**推荐**安装 ffmpeg。
+- **setup.sh 会装的组件**（全部能在 CPU 上跑）：
+
+  | 组件 | 用途 |
+  |---|---|
+  | numpy / scipy / numba | 信号处理 |
+  | demucs + PyTorch | 音轨分离，分成人声/鼓/贝斯/其他 |
+  | De-limiter | 神经网络去压限 |
+  | faster-whisper | 用词级时间戳定位 MC 讲话，并做可懂度检查 |
+
+- **缺组件时**：缺哪个就自动降级。`python3 scripts/audiofix.py check` 会告诉你少了什么、会影响什么。
+- **测试环境**：Python 3.13、torch 2.15、demucs 4.1.0、faster-whisper 1.2.1、numpy 2.5、scipy 1.18、ffmpeg 6.1。
+- **只用 CPU**：可以先装 CPU 版 PyTorch，省磁盘空间。
+
+## 快速开始
+
+```bash
+python3 scripts/audiofix.py auto 演出录音.m4a --work out
+```
+
+`out/` 里会有：
+
+| 文件 | 内容 |
+|---|---|
+| `diagnosis.md` | 判断报告：哪里坏了，附数字 |
+| `overview.png` | 频谱图、响度和立体声宽度随时间的变化，标出歌曲/MC 分段 |
+| `plan.json` | 修复计划，每一步都有 `why` |
+| `restored.wav` | 修复结果，24-bit / 44.1 kHz |
+| `restored.m4a` | AAC 256k 副本，方便手机听 |
+| `verification.md` | 验证报告：每项检查 PASS/WARN，附修复前后数字 |
+| `AB.wav` | 同一段先放原版再放修复版，每对响度对齐，**先听这个** |
+| `compare.png` | 修复前后与参考的长期频谱对比 |
+
+分步运行，可以先看计划再修：
+
+```bash
+python3 scripts/audiofix.py analyze 演出录音.m4a --work out     # 判断 + 生成计划
+# 看 out/diagnosis.md，必要时改 out/plan.json
+python3 scripts/audiofix.py restore --work out                  # 修复 + 验证
+python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3   # 改一个参数重渲染
+```
+
+**音色参考决定什么叫"好"。** 内置的 `jrock_band` 是吉他乐队、现代响度母带的统计数据。其他风格或别的艺人，建议自己建参考：
+
+```bash
+# 用该艺人的录音室音轨（最好）
+python3 scripts/audiofix.py profile --name myband --files a.flac b.mp3 c.m4a --out myband.json
+# 或者用 iTunes 官方 30 秒试听片段（需要联网，只保存统计数据，不保存音频）
+python3 scripts/audiofix.py profile --name myband --itunes-artist "艺人名" --country jp --out myband.json
+python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile myband.json
+```
+
+---
+
+## 怎么判断（两条路径）
+
+先测全局，再把文件分成"歌曲 / MC / 间隙"，然后对每类内容分别判断。完整的阈值、听感对应和例子见 [`references/diagnosis.md`](skills/live-audio-restore/references/diagnosis.md)。
+
+### 内容分段：哪里是歌，哪里是 MC
+
+| 依据 | 歌曲 | MC |
+|---|---|---|
+| 节奏组（鼓+贝斯）能量占比 | 高 | < 8 % |
+| 人声中的停顿比例 | 唱歌约 5 % | 说话约 45 % |
+| Whisper 每秒识别到的词 | — | ≥ 0.6 个/秒 |
+
+最短片段：歌曲 20 秒、MC 10 秒，更短的并入相邻片段。音乐内部的"分区"只在录音链路的立体声像突变处切（比如转播换了信号源），不在换歌处切。
+
+### 全局问题
+
+| 测量 | 阈值 | 听感 | 触发的修复 |
+|---|---|---|---|
+| 平顶连续段 | ≥ 20 次/分钟 | 削波，炸音 | 去削波 |
+| 50/60 Hz 及谐波高出频谱 | 基波 ≥ 10 dB，或两个谐波 ≥ 8 dB | 嗡嗡声 | 陷波去哼声 |
+| 截止频率处的陡降 | > 25 dB 且截止 < 18.5 kHz | 发闷，没有空气感 | 高频重建 |
+
+### 音乐路径
+
+| 测量 | 阈值 | 听感 | 触发的修复 |
+|---|---|---|---|
+| 响度范围 LRA、峰值/响度比 PLR | LRA < 4 LU 或 PLR < 11 dB 为过度压限；LRA < 2 或 PLR < 9.5 为重度 | 糊、累耳朵、鼓没冲击力 | 神经网络去压限，深度 1.5 或 2 倍 |
+| 每个分离音轨中 4 秒窗口 L/R 相关性 < -0.3 的能量占比 | ≥ 10 % | 相位怪，手机外放少了乐器 | 只旋转相干反相的频点，不整轨翻转 |
+| 人声占 3–10 kHz 能量的比例，5–8 kHz 与参考的偏差 | ≥ 50 % 或 > +4 dB 时去齿音最多 9 dB，否则 6 dB | 齿音、刺耳 | 去齿音 |
+| 长期频谱与参考的偏差（逐频带） | 越大越需要校正 | 闷、浑、薄、刺 | 分轨音色匹配 60 %，整体匹配 85 % |
+| 各音轨相对整体的电平与参考比 | 差异大就调 | 人声太前/太后、贝斯太弱 | 向参考比例移动一半，最多 ±3 dB |
+| 立体声类型 | 立体声才加宽 | — | 单声道不做假立体声 |
+
+### MC 路径
+
+| 测量 | 阈值 | 听感 | 触发的修复 |
+|---|---|---|---|
+| 句间间隙相对讲话的电平（中位数） | > -8 dB 时，观众在和讲话抢 | 欢呼盖过讲话 | 间隙中压住观众，讲话帧最多动 1.5 dB |
+| 人声/背景比 | < 6 / < 15 / < 25 / ≥ 25 dB | 底噪、嘈杂 | 平稳降噪 10 / 8 / 6 / 0 dB |
+| 80 Hz 以下能量相对 200–800 Hz | > -12 dB 为轰鸣 | 低频隆隆声 | 高通 100 Hz（否则 75 Hz） |
+| 分离后人声轨保留了多少讲话（vocal_share） | < 0.3 说明分离把人声丢了 | — | 改用整体混音处理 |
+| 人声频谱与语音长期平均谱（LTASS）的偏差 | — | 单薄、发闷 | 向 LTASS 移动一半，提升最多 +3 dB |
+| 讲话人定位 | 优先 Whisper 词级时间戳；没有 Whisper 时用浊音检测（准确率约 80 %） | — | 决定"哪些帧是讲话"，后续每一步都依赖它 |
+
+---
+
+## 怎么修（两条路径）
+
+每一步的原理、参数和失败模式，见 [`references/music-path.md`](skills/live-audio-restore/references/music-path.md) 和 [`references/speech-path.md`](skills/live-audio-restore/references/speech-path.md)。
+
+### 音乐路径
+
+1. **基础修复**：20 Hz 高通、去哼声、去削波。
+2. **神经网络去压限**：用 De-limiter 的增益曲线，按 1.5–2 倍深度作用在每个音轨上。
+3. **反相修复**：只旋转反相音轨里相干反相的频点。
+4. **分轨处理**：人声去齿音，鼓的瞬态恢复，吉他/键盘层加宽。
+5. **分轨音色匹配**：每个音轨向参考里的同一音轨移动 60 %，按分区进行。
+6. **音轨平衡**：向参考比例移动一半。
+7. **分轨动态**：鼓轨单独削峰；贝斯、人声、吉他各自压缩；总线轻度粘合。
+   - 这样主限幅器不会带着整个混音"抽吸"。
+8. **整体音色匹配**：85 %，8191 抽头线性相位 FIR。
+9. **高频重建**：在编码器截止频率以上，用单边带频移从下方频段重建，并校准到参考的高频斜率。
+10. **低频单声道化**：100 Hz 以下合成单声道。
+11. **感知响度母带**：找到限幅器"超过 1 dB 的时间 ≤ 8 %、超过 2 dB 的时间 ≤ 1.5 %"的最响电平，真峰值 -1 dBTP。
+
+### MC 路径
+
+1. **定位讲话人**：Whisper 词级时间戳；语言由前三候选分别解码打分决定，避免误判。
+2. **取声源**：人声取自分离的人声轨，现场氛围放在下面（-6 到 -12 dB），保留"在现场"的感觉。
+3. **平稳降噪**：ffmpeg afftdn，6–10 dB。**不用神经网络降噪**，它会把经过 PA 的混响讲话一起删掉。
+4. **高通**：75 或 100 Hz。
+5. **音色**：向语音长期平均谱移动一半，提升最多 +3 dB。
+6. **动态**：去齿音，2.5:1 压缩，慢速电平平衡。
+7. **压住句间欢呼**：讲话本身几乎不动。
+8. **响度**：纯 MC 文件 -16 LUFS；整场录音中 MC 比音乐低 4 dB。
+
+### 怎么验证
+
+- **自动检查**：每项给出 PASS/WARN 和修复前后数字。
+  - 真峰值、没有新削波。
+  - 音色更接近参考、动态没有被进一步压扁、中频没有残留反相、单声道兼容。
+  - MC 欢呼已在讲话之下、Whisper 识别讲话不比原来差。
+- **人耳确认**：`AB.wav` 是响度对齐的原版/修复版对比，避免"更响 = 更好"的错觉。
+
+用户听完后的反馈怎么对应到参数（"太闷""太刺""低音太多""欢呼没了不像现场"……），见 [`references/tuning.md`](skills/live-audio-restore/references/tuning.md)。
+
+---
+
+## 在不同 AI 里使用
+
+| 工具 | 用法 |
+|---|---|
+| **Claude Code** | 把 `skills/live-audio-restore` 复制到 `~/.claude/skills/`（个人）或项目的 `.claude/skills/`。直接说"帮我修一下这段 live 录音"就会触发。在本仓库里打开时，`CLAUDE.md` 也会把它指过去 |
+| **Claude.ai / Claude 桌面版** | 把 `live-audio-restore` 文件夹打成 zip，在设置里作为 skill 上传 |
+| **Codex CLI、Cursor、Gemini CLI、GitHub Copilot、Aider 等编程代理** | 在本仓库里打开即可，[`AGENTS.md`](AGENTS.md) 会指引它们读取 `SKILL.md` 并按流程执行。支持 Agent Skills 开放格式的工具，也可以直接加载 `skills/live-audio-restore` 文件夹 |
+| **ChatGPT（代码解释器/数据分析）** | 沙箱通常不能联网、没有 PyTorch 和 ffmpeg。上传仓库 zip 和 **WAV** 格式音频，让它运行 `auto my.wav --work out --no-stems`。效果会比完整版弱，见 [`references/other-ai.md`](skills/live-audio-restore/references/other-ai.md) |
+| **只能聊天的 AI** | 你在本地跑命令，把 `diagnosis.md` / `plan.json` / `verification.md` 贴给它看，它帮你判断和调参 |
+| **自定义 GPT / Gem / 项目** | [`references/other-ai.md`](skills/live-audio-restore/references/other-ai.md) 里有一段可直接粘贴的系统提示词 |
+
+## 目录结构
+
+```
+AGENTS.md                            给各类编程代理的入口说明
+CLAUDE.md                            Claude Code 在本仓库中的入口（引用 AGENTS.md）
+skills/live-audio-restore/
+├── SKILL.md                         工作流（AI 读这个）
+├── scripts/
+│   ├── audiofix.py                  命令行：check | profile | analyze | restore | verify | auto
+│   ├── audiofix/                    实现：测量、分段、计划规则、音乐路径、讲话路径、母带、验证、DSP、响度
+│   ├── setup.sh                     安装依赖和 De-limiter 模型
+│   └── make_test_clip.py            生成带已知问题的合成测试片段
+├── assets/profiles/                 内置参考：jrock_band.json、speech_ltass.json（只含统计数据）
+├── references/
+│   ├── diagnosis.md                 怎么判断：每个测量、阈值、听感、决策（两条路径）
+│   ├── music-path.md                音乐路径每一步：为什么、怎么做、参数、失败模式
+│   ├── speech-path.md               MC 路径每一步
+│   ├── verification.md              验证检查、A/B 试听方法、图怎么看
+│   ├── tuning.md                    听感反馈 → 参数（两条路径）
+│   ├── pitfalls.md                  踩过的坑和现在的规避方法
+│   └── other-ai.md                  ChatGPT / Codex / Gemini / 离线使用
+└── evals/                           测试用例（提示词、预期结果、合成输入）
+```
+
+## 局限（实话实说）
+
+- **高频重建是推算，不是复原。** 编码器丢掉的信息找不回来，重建的高频是从下方频段推算出的"合理的"高频。
+- **讲话时同时出现的欢呼去不掉。** 动它就会伤到人声。只能压句与句之间的欢呼。
+- **音轨分离有串音。** 单个音轨改得太狠会出现"水声"，默认参数已经收敛过。
+- **"好"由参考决定。** 参考选错风格，结果就会往那个风格靠。尽量用同一艺人的录音室音轨建参考。
+- **单声道素材不会被做成假立体声。**
+- **AI 听不到声音。** skill 要求 AI 只汇报测量到的变化，最终由人听 `AB.wav` 判断。
+
+## 致谢与第三方组件
+
+| 组件 | 作者 / 来源 | 许可 |
+|---|---|---|
+| Demucs（htdemucs） | Meta Research | MIT |
+| De-limiter | Jeon & Lee, WASPAA 2023 | MIT |
+| faster-whisper / Whisper | SYSTRAN / OpenAI | MIT |
+| asteroid | — | MIT |
+
+其他：
+
+- 响度测量按 ITU-R BS.1770 / EBU R128 实现。
+- 语音长期平均谱近似取自 Byrne et al. (1994)。
+- 内置的 `jrock_band` 参考只保存统计数据（频谱形状、音轨比例、高频斜率），由官方试听片段计算而来，仓库中不含任何音频。

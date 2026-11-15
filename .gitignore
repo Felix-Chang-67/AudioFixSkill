@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.nbi
+*.nbc
+.DS_Store
+# work folders and renders from local runs
+work*/
+out/
+*-workspace/
+skills/live-audio-restore/evals/results/

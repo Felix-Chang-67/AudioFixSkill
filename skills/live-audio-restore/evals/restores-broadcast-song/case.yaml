@@ -1,0 +1,14 @@
+schema_version: "1.1"
+name: restores-broadcast-song
+expected_outcome: |
+  The assistant restores the synthetic broadcast song with the live-audio-restore workflow
+  (analyze, plan, restore, verify). The diagnosis finds the three planted problems: heavy limiting
+  (loudness range under 1 LU), a guitar layer in anti-phase between left and right (found in the
+  "other" stem, or in the mid band of the mix when stems are unavailable), and an AAC band limit at
+  about 16-18 kHz. The plan switches on de-limiting (or stronger transient shaping if the model is
+  missing), the polarity repair and the band extension. The run produces a restored WAV and a
+  loudness-matched A/B file, and the verification shows every check as PASS, or each WARN is
+  explained. The final message is in Chinese, quotes measured before/after numbers, does not claim
+  to have listened, and asks the user to listen to the A/B file.
+context:
+  scaffold_script: place-files.sh

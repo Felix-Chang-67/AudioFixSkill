@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: tames-crowd-in-mc
+expected_outcome: |
+  The assistant restores the synthetic MC clip with the live-audio-restore workflow. The content
+  map treats the clip as speech, so the speech path runs. The diagnosis reports that the cheering
+  between sentences is louder than the talk (gap-vs-speech above 0 dB) and that the recording level is
+  very low. The plan switches crowd taming on and uses only gentle stationary denoise, no neural
+  denoiser. After restoration the gaps sit below the speech, the talker's words are recognised at
+  least as well as before, and the file is about -16 LUFS with a true peak at or below -1 dBTP. Some
+  crowd sound remains between sentences, so the recording still sounds live. The final message is in
+  Chinese, quotes measured numbers, and asks the user to listen to the A/B file.
+context:
+  scaffold_script: place-files.sh
