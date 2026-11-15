@@ -123,6 +123,9 @@ voices end up in "other". Words still show up in the mix. Crowd shouts are spars
   so a bass player noodling during an MC does not become a "song", and a sung breakdown does not become an "MC".
 - For processing, a gap takes its neighbours' class. It is split at its middle when the neighbours differ.
 - A file with neither music nor speech is treated as speech if it has no rhythm section, otherwise as music.
+- **Without stems there is no content map.** The rhythm section is measured on the drum and bass stems, and Whisper
+  alone cannot tell talk from singing, because lyrics are words too. The whole file is treated as music, with a
+  warning in `diagnosis.md`. For an MC, pass `--content speech`.
 
 **Sections inside music.**
 
@@ -203,16 +206,21 @@ that mistakes cheering for speech leaves the crowd untouched; one that misses sp
 | Whisper word timings (`asr`) | Words only, so crowd shouting without words is excluded | Language picked by decoding a sample in the 3 likeliest languages and keeping the most probable. Language ID alone took a synthetic English voice for Welsh with 77 % confidence |
 | Voicing (`harmonic`) | About 80 % F1 against word timings; misses part of the crowd | Fallback without faster-whisper |
 
+The voice is treated like the vocal stem of the music path (`speech.mode` v2, the default). `gentle` keeps the
+earlier, lighter treatment; the table gives both where they differ.
+
 | Step | Switched on when | Strength / parameters |
 |---|---|---|
 | Source | Stems available and vocal_share ≥ 0.3 | Voice from the vocal stem; the rest high-passed at 90 Hz underneath at -12 dB (voice-to-background < 6), -10 dB, or -6 dB (≥ 20) |
+| De-limit (v2) | The songs of the same file are de-limited and the talk's PLR < 11 dB | Depth 1.5. A low PLR alone does not count: steady crowd noise gives one too. Broadcast MC on its own: switch on by hand |
 | Stationary denoise | ffmpeg present | nr 10 dB if voice-to-background < 6, 8 if < 15 or unknown, 6 if < 25, off above |
 | High-pass | Always | 100 Hz if rumble > -12 dB, else 75 Hz |
-| Tone match | Always | 50 % toward the speech spectrum, +3 / -6 dB. A PA'd voice is thinner than studio speech, and big low boosts bring up room boom |
+| Voice EQ, target (v2) | First that applies | `song_vocal`: the file has songs with stems, so their vocal-stem EQ is copied (same chain). `studio_vocal`: the profile's studio vocal above 400 Hz, the speech spectrum below 250 Hz. `ltass`: the speech spectrum |
+| Voice EQ, strength | Always | v2: 85 % toward the target, boosts only where the voice dominates the mix, +3 / -8 dB. gentle: 50 % toward the speech spectrum, +3 / -6 dB. Boosts stay at +3 dB in both: a PA'd voice is thinner than studio speech, and big low boosts bring up room boom |
 | De-ess | Always | Max 6 dB, brightest 20 % of moments |
-| Compression and leveler | Always | 2.5:1; slow leveler ±6 dB over 3 s |
+| Compression and leveler | Always | v2: 3:1, 4/90 ms (the music path's vocal compressor). gentle: 2.5:1. Slow leveler ±6 dB over 3 s |
 | Crowd taming | gap_minus_speech > -8 dB | Gaps capped at speech level -2 dB; every gap frame at least 4 dB down (gentle expansion) and at most 18 dB down. Speech frames move at most 1.5 dB |
-| Band extension | Off | A synthetic top on a voice tends to lisp |
+| Band extension (v2) | Codec wall below 18.5 kHz | As for the songs, 3 dB gentler (a loud synthetic top on a voice can lisp). Off in gentle mode |
 | Loudness | Always | -16 LUFS for speech only. In a concert, 4 dB under the music |
 
 ## 6. Worked examples
@@ -249,15 +257,17 @@ Results:
 | Whisper (small); decoding scores ja -0.53, en -1.09, ko -2.33 → Japanese; 386 words; speech 47 % of the time | Talker located by words |
 | Gaps +5.6 dB vs speech; loudest 10 % +20.9 dB | Crowd taming |
 | Voice-to-background 4.8 dB | Denoise 10 dB; ambience at -12 dB |
-| Voice vs speech spectrum: RMS 11.2 dB | Tone match (+3 dB cap) |
+| Talk only; music profile has vocal statistics | Voice EQ target `studio_vocal` |
+| Voice: PA boom at 160-200 Hz, "honk" at 1-3 kHz, little air above 8 kHz against the target; 5.8 dB RMS off | Voice EQ 85 %: -1.6 dB at 160 Hz, -3 to -6 dB at 1-3 kHz, +3 dB at 8-12.5 kHz, +3 dB at 100 Hz |
 
-Results:
+Results (v2 mode):
 
 | Measure | Before | After |
 |---|---|---|
-| Gaps vs speech, median | +5.6 dB | -2.6 dB |
-| Gaps vs speech, loudest 10 % | +20.9 dB | -1.4 dB |
-| Talker's recognised-word mass (Whisper on the mix) | 281.1 (396 words, mean log-prob -0.51) | 285.9 (391 words, -0.46) |
+| Gaps vs speech, median | +5.6 dB | -2.5 dB |
+| Gaps vs speech, loudest 10 % | +20.9 dB | -1.5 dB |
+| Talker's recognised-word mass (Whisper on the mix) | 281.1 (396 words, mean log-prob -0.52) | 286.2 (397 words, -0.49) |
+| Voice vs its target, talker's frames | 5.8 dB RMS | 3.4 dB RMS |
 | Loudness | -24.6 LUFS | -16.1 LUFS |
 
 ### C. Synthetic MC where separation fails (test clip)
@@ -273,8 +283,9 @@ Results:
 
 | Measure | Before | After |
 |---|---|---|
-| Gaps vs speech | +9.0 dB | -1.7 dB |
-| Talker's recognised-word mass (Whisper on the mix) | 41.8 (48 words, mean log-prob -0.17) | 43.8 (49 words, -0.15) |
+| Gaps vs speech | +9.0 dB | -1.8 dB |
+| Talker's recognised-word mass (Whisper on the mix) | 41.8 (48 words, mean log-prob -0.17) | 42.5 (48 words, -0.16) |
+| Voice EQ boosts above the voice's 5.5 kHz band edge | — | none: the voice's share there, talk minus the quieter gaps, is nil |
 
 ## 7. When the numbers and the ears disagree
 

@@ -10,7 +10,18 @@ Live talk has different problems from live music:
 - The audience cheers between sentences, often louder than the talk.
 - Audience recorders often catch the talk very low (-25 to -45 LUFS).
 
-The goal is to make every word easy to follow without making the room vanish or the voice sound processed.
+The goal is to make every word easy to follow, and the voice sound as good as the restored singing voice, without
+making the room vanish.
+
+**Two modes** (`speech.mode`):
+
+| Mode | What the voice gets |
+|---|---|
+| `v2` (default) | The music path's vocal treatment, the one that made the clearly audible difference on songs: voice EQ toward the reference vocal at the music path's strength (85 %), its vocal compressor (3:1, 4/90 ms), de-limiting when the talk went through the broadcast limiter, band extension above a codec wall |
+| `gentle` | The earlier speech path: half-way (50 %) toward the long-term speech spectrum, 2.5:1 compression, no band extension. For listeners who find v2 too processed |
+
+The speech-only steps are the same in both: talker location, room kept underneath, stationary denoise, leveler,
+crowd taming.
 
 ## 1. Locating the talker (`vad`)
 
@@ -53,7 +64,17 @@ material if time allows.
 - **`mix`.** When there are no stems, or separation lost the voice (`vocal_share` < 0.3). Everything below works on
   the whole mix.
 
-## 3. Stationary denoise (`denoise`)
+## 3. De-limit (`delimit`, v2 only)
+
+The De-limiter gain curve at depth 1.5, on the voice and the room, as in the music path.
+
+- **Switched on when** the songs of the same file are de-limited (they show the broadcast limiter, so the talk went
+  through the same chain) **and** the talk's peak-to-loudness ratio is under 11 dB.
+- **Not on a low PLR alone.** Steady crowd noise or a dense voice also gives a low PLR: a synthetic MC with constant
+  crowd noise measured 8.9 dB without any limiter.
+- For a broadcast MC on its own (a TV talk segment), switch it on by hand: `speech.delimit.enabled=true`.
+
+## 4. Stationary denoise (`denoise`)
 
 ffmpeg `afftdn`, tracking the noise (`tn=1`). The noise floor is set to the 10th percentile of the voice's 100 ms
 levels.
@@ -70,30 +91,67 @@ were tested at full strength. Both removed so much speech that Whisper could har
 settings they did nothing useful. Quality scores without a reference, such as SQUIM, still rated those outputs
 highly: they reward "clean", not "the words are still there". Do not use them here.
 
-## 4. High-pass (`highpass_hz`)
+## 5. High-pass (`highpass_hz`)
 
 100 Hz when the voice's energy below 80 Hz is within 12 dB of its 200-800 Hz energy (rumble); otherwise 75 Hz.
 
-## 5. Tone match (`match`)
+## 6. Voice EQ (`match`)
 
-1. Take the long-term spectrum of the voice over the talker's frames.
-2. Compare it with the long-term average speech spectrum (approximately after Byrne et al. 1994, converted to power
-   density).
-3. Move `alpha` = 50 % toward it, with **boosts capped at +3 dB** and cuts at -6 dB. Nothing is boosted above the
-   voice's own bandwidth or below 1.2 × the high-pass.
+**Target (v2), first that applies** (`match.target`):
+
+| Target | When | What |
+|---|---|---|
+| `song_vocal` | The file also has songs, with stems and a profile with stem statistics | The EQ the music path gave the singer's vocal stem (mean over sections, also saved as `vocal_eq.json`) is applied to the talk as it is. Same mic, same PA, same broadcast chain, so the same correction: the talker sounds like the restored singer |
+| `studio_vocal` | Talk only, and the music profile has vocal statistics | The studio vocal of the music profile above 400 Hz, the long-term speech spectrum below 250 Hz, blended in between |
+| `ltass` | No vocal statistics in the profile | The long-term speech spectrum (approximately after Byrne et al. 1994, converted to power density) |
+
+For a talk-only file from a show whose songs you also have, restore a song first and point the MC at its curve:
+`--set speech.match.target=song_vocal speech.match.chain_file=SONGWORK/vocal_eq.json`.
+
+**Why the speech spectrum below 250-400 Hz.** People speak lower than they sing. A studio vocal (singing) is nearly
+empty below 200 Hz: -15 dB at 160 Hz and -24 dB at 125 Hz against its 300-1000 Hz level. A speaking voice has its
+fundamental and first harmonics there, so matching the talk to the singing vocal down there would thin it.
+
+**How (v2), the music path's per-stem curve:**
+
+1. Measure the voice's long-term spectrum on the talker's frames, normalised at 300-1000 Hz.
+2. Move `alpha` = 85 % toward the target. This is the music path's overall strength.
+3. Scale boosts by how much the voice dominates the mix in each band. This is full where the voice is at least 30 %
+   of the power, and none below 5 %, so the crowd is not boosted along with it.
+   - With stems, the voice's share is the vocal stem against the mix.
+   - On the mix alone (no stems, or separation lost the voice), the share is the talk minus the quieter half of the
+     gaps between sentences, which is the steady background under the talk. On a synthetic MC whose voice stops at
+     5.5 kHz, this kept the +3 dB "air" boost off the crowd above it.
+4. Cap boosts at +3 dB and cuts at -8 dB. Nothing is boosted below 1.2 × the high-pass or above the voice's own
+   bandwidth.
+
+On the 3:23 audience MC (studio-vocal target), the two modes' EQ compare like this:
+
+| Band | v2 | gentle | Effect of v2 |
+|---|---|---|---|
+| 100 Hz | +3.0 dB | +3.0 dB | Same body |
+| 160-200 Hz | -1.6 dB | +1.4 to +1.7 dB | Cuts the PA boom instead of lifting it |
+| 1-3 kHz | -2.9 to -5.8 dB | -0.4 to -1.8 dB | Much less "honk" |
+| 8 kHz | +3.0 dB | +1.7 dB | More air |
+| 12.5 kHz | +3.0 dB | — | More air |
+
+**Gentle mode:** 50 % toward the speech spectrum, boosts capped at +3 dB, cuts at -6 dB.
 
 PA'd voices measure far thinner than studio speech: 12-18 dB less at 125-500 Hz in one MC. Correcting that fully
-would bring up the room's boom along with the voice, hence the cap. Typical result: moderate low-mid warmth, a
-little presence, sibilance reduced.
+would bring up the room's boom along with the voice, hence the +3 dB boost cap in both modes.
 
-## 6. De-ess, compression, leveler
+## 7. De-ess, compression, leveler
 
 - **De-ess:** as in the music path, at most 6 dB.
-- **Compression:** 2.5:1, 5 / 120 ms, threshold at the 60th percentile, make-up gain to the same RMS.
+- **Compression:**
+  - v2: the music path's vocal compressor, 3:1, 4 / 90 ms.
+  - gentle: 2.5:1, 5 / 120 ms.
+
+  Both set the threshold at the 60th percentile, with make-up gain to the same RMS.
 - **Leveler:** a 3 s level of the talker's frames only, ridden toward the median by at most ±6 dB and smoothed over
   1 s. Loud and quiet sentences come closer together.
 
-## 7. Crowd taming (`crowd`)
+## 8. Crowd taming (`crowd`)
 
 **Switched on when** the gaps between sentences sit above -8 dB against the speech (median, 400 ms windows).
 
@@ -109,7 +167,16 @@ The crowd is held under the talk, not removed: gaps keep their applause at a com
 
 **What it cannot do.** Cheering *during* a word stays, because touching it would touch the word.
 
-## 8. Loudness
+## 9. Band extension (`band_ext`, v2 only)
+
+**Switched on** for a codec wall below 18.5 kHz (a broadcast rip), so the talk does not sound duller than the songs
+around it.
+
+**How:** the same single-sideband shift as in the music path. It is calibrated on the talker's frames, with the band
+above the cut-off set 6 dB under the band below the cut-off, then `below_ref_db` (3 dB) lower still: a loud
+synthetic top on a voice can lisp.
+
+## 10. Loudness
 
 | File | Target |
 |---|---|
@@ -118,13 +185,21 @@ The crowd is held under the talk, not removed: gaps keep their applause at a com
 
 ## Results on real material
 
-| MC recording | Gaps vs speech | Talker's recognised-word mass (Whisper on the mix) |
-|---|---|---|
-| 3:23 audience recording | +5.6 → -2.6 dB (loudest 10 %: +20.9 → -1.4 dB) | 281.1 → 285.9; mean log-prob -0.51 → -0.46 |
-| One minute of MC inside a song-MC-song file | +1.5 → -3.9 dB (loudest 10 %: +15.9 → -1.0 dB) | 130.7 → 128.6; mean log-prob -0.60 → -0.45 |
+v2 mode:
 
-The crowd moves a lot and the words stay put: recognition is about the same, with higher confidence. That is the
-intended result. The speech path makes the talk easier on the ear without removing anything from the voice.
+| MC recording | Target | Gaps vs speech | Talker's recognised-word mass (Whisper on the mix) | Voice vs its target |
+|---|---|---|---|---|
+| 3:23 audience recording | studio_vocal | +5.6 → -2.5 dB (loudest 10 %: +20.9 → -1.5 dB) | 281.1 → 286.2; mean log-prob -0.52 → -0.49 | 5.8 → 3.4 dB |
+| One minute of MC inside a song-MC-song file | song_vocal | +1.5 → -3.9 dB (loudest 10 %: +15.9 → -0.6 dB) | 130.7 → 132.1; mean log-prob -0.60 → -0.50 | — |
+| 40 s synthetic MC, separation lost the voice | studio_vocal, on the mix | +9.0 → -1.8 dB | 41.8 → 42.5 | not judged: the voice is the mix |
+
+The crowd moves a lot and the words stay put: recognition is about the same, with higher confidence. The gentle mode
+gave the same gaps and word mass within 1-2 %. The modes differ in the voice's tone, which only the listener can
+judge: compare them with a three-way A/B (original, gentle, v2).
+
+The song-MC-song file was put together from two different recordings, so its songs and talk do not share a chain.
+`song_vocal` is meant for real concert files, where they do. If the talk sounds dull or thin there, switch to
+`speech.match.target=studio_vocal`.
 
 The verify step re-runs Whisper on input and output (beam search, seeded so a rerun gives the same answer), drops
 segments where Whisper loops, and adds up the probabilities of the words inside the talker mask (the

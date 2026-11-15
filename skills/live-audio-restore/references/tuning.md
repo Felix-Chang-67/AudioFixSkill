@@ -33,9 +33,13 @@ python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.
 |---|---|---|
 | Crowd still too loud between sentences | Cap too loose, or the talker mask includes crowd (fallback detector) | `speech.crowd.cap_db=5 speech.crowd.floor_db=24`; install faster-whisper and re-analyze |
 | It sounds dead, no audience | Too much taming | `speech.crowd.cap_db=-1 speech.crowd.gap_db=2`; or `speech.source.ambience_db=-6` |
+| Voice too processed, too bright, "radio" | The v2 vocal treatment is too strong for this listener | `speech.mode=gentle` (the earlier, lighter path); or `speech.match.alpha=0.6` |
+| Talker should sound like the restored singer | Talk-only file from a show whose songs were restored separately | `speech.match.target=song_vocal speech.match.chain_file=SONGWORK/vocal_eq.json` |
+| Broadcast MC sounds squashed | Talk-only broadcast: de-limiting is not switched on automatically | `speech.delimit.enabled=true` |
 | Voice boomy | Low boost or rumble | `speech.highpass_hz.value=110`; `speech.match.hi_db=1` |
 | Voice thin, tinny | The match was capped | `speech.match.hi_db=5` |
-| Voice muffled | Presence missing | `speech.match.alpha=0.7` |
+| Voice muffled | Presence missing | `speech.match.alpha=0.95`; in gentle mode `speech.mode=v2` |
+| Synthetic-sounding "s" or fizz on the voice (broadcast rips) | The rebuilt top of the talk | `speech.band_ext.below_ref_db=6`; or `speech.band_ext.enabled=false` |
 | Lisping or harsh "s" | De-ess too weak or too strong | `speech.deess.max_cut_db=9`, or `3` for lisping |
 | Swirly or underwater voice | Denoise too strong | `speech.denoise.nr_db=4`; or `speech.denoise.enabled=false` |
 | Loud and quiet sentences still uneven | Leveler range | `speech.leveler.range_db=9` |

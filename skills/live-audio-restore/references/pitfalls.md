@@ -89,8 +89,17 @@ before changing a default.
       compression-ratio test (> 2.4), and compares the sum of word probabilities with a 10 % margin. Real speech
       damage, as from the neural denoisers above, collapses that sum. Read the transcript before quoting a large
       gain.
+22. **"Boost only where the voice dominates" needs to know where the voice is.**
+    - With stems, the vocal stem shows where the voice is.
+    - On the mix alone, every band looks like "voice". A synthetic MC whose voice stops at 5.5 kHz got a +3 dB "air"
+      boost on the crowd above it.
+    - The voice's share is now estimated as the talk minus the quieter half of the gaps.
+    - For the same reason, the voice-tone check is skipped when the voice is the mix. Denoising the background moved
+      the measured "voice" away from its target although the voice EQ was right.
+23. **Without stems, an MC is taken for music.** The content map needs the drum and bass stems. Pass
+    `--content speech`; `analyze` now warns.
 
 ## Numerics
 
-22. **Floating-point smoothing can go slightly negative.** The log of a negative is NaN, and NaN gains silently ruin
+24. **Floating-point smoothing can go slightly negative.** The log of a negative is NaN, and NaN gains silently ruin
     audio. Clamp before `log10`.

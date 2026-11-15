@@ -26,9 +26,10 @@ workflow:
 - **Music path** (songs): de-limit, repair anti-phase layers, de-ess, restore drum hits, widen, match each
   instrument and then the whole mix to the tone of reference recordings, control dynamics per instrument, rebuild
   the top octave above a codec cut-off, then master to a loudness the limiter can reach without squashing.
-- **Speech path** (MC, stage talk, announcements): keep the voice and push the room underneath, gentle stationary
-  denoise, tone toward the long-term speech spectrum, de-ess, compress and level, then hold the crowd down in the
-  gaps between sentences without touching the words.
+- **Speech path** (MC, stage talk, announcements): the voice gets the music path's vocal treatment. It is EQ'd toward
+  the singer's restored vocal sound, compressed like a vocal, and de-limited and band-extended when measured. The room
+  is kept underneath, with gentle stationary denoise and a leveler, and the crowd is held down in the gaps between
+  sentences without touching the words.
 - **Mixed files** (a concert with songs and MCs) are split automatically and each part takes its own path.
 
 Everything is driven by `scripts/audiofix.py`. It always runs in the same order: **analyze → plan → restore →
@@ -72,6 +73,7 @@ python3 scripts/audiofix.py auto INPUT --work WORK            # analyze + restor
 | `verification.md` / `.json` | Checks and before/after numbers |
 | `AB.wav` | Original, then restored, for the same passages, loudness-matched per pair |
 | `compare.png` | Long-term spectra against the reference, and before/after spectrograms |
+| `vocal_eq.json` | Songs only: the EQ given to the vocal stem. MCs from the same show can reuse it |
 | `log.txt` | Everything the run printed |
 
 ## Workflow
@@ -102,7 +104,7 @@ python3 scripts/audiofix.py check
 | Missing | What degrades |
 |---|---|
 | ffmpeg | Only WAV in; no AAC copy, no stationary denoise, no declip |
-| demucs / torch | No stems: polarity repair, tone match and loudness run on the whole mix; no per-instrument steps; speech uses the mix |
+| demucs / torch | No stems: polarity repair, tone match and loudness run on the whole mix; no per-instrument steps; speech uses the mix. **Songs and talk can no longer be told apart**: the file is treated as music unless you pass `--content speech` (an MC) |
 | De-limiter | Over-limited music gets stronger drum-transient shaping instead of neural de-limiting |
 | faster-whisper | The MC talker is located by voicing instead of word timings (about 80 % accurate against word timings); `verify` loses the intelligibility check |
 | numba | Slower, vectorised approximations |
@@ -155,6 +157,8 @@ Common edits:
 | More air | `music.band_ext.below_ref_db=-2` (louder than the reference; careful) |
 | Spoken parts louder or quieter against the songs | `master.speech_offset_db=2` |
 | Keep more audience between sentences | `speech.crowd.cap_db=-2` or `speech.crowd.enabled=false` |
+| Lighter, more natural voice treatment on MCs | `speech.mode=gentle` |
+| MC from a show whose songs were restored separately | `speech.match.target=song_vocal speech.match.chain_file=SONGWORK/vocal_eq.json` |
 | Louder or more dynamic master | `master.over1_max_pct` and `master.over2_max_pct` (8 and 1.5 by default) |
 
 ### 5. Restore and verify
@@ -222,16 +226,23 @@ Map what the user says to a knob, change one thing at a time, re-render and send
 10. Bass below 100 Hz to mono.
 11. Perceptual loudness and a true-peak limiter at -1 dBTP.
 
-**Speech** (`references/speech-path.md`):
+**Speech** (`references/speech-path.md`). The voice gets the music path's vocal treatment (`speech.mode` v2; `gentle`
+is the earlier, lighter path):
 
 1. Locate the talker: Whisper word timings, or voicing as a fallback.
 2. Voice from the vocal stem, the rest underneath at -6 to -12 dB. If separation lost the voice, work on the mix.
-3. Stationary denoise of 6-10 dB (ffmpeg afftdn; never a neural denoiser).
-4. High-pass at 75 or 100 Hz.
-5. Half-way tone match to the speech spectrum, boosts at most +3 dB.
-6. De-ess, 2.5:1 compression, slow leveler.
-7. Crowd taming in the gaps; speech frames move at most 1.5 dB.
-8. Loudness: -16 LUFS for speech only, 4 dB under the music in a concert.
+3. De-limit when the songs of the same file show the broadcast limiter and the talk's PLR is low.
+4. Stationary denoise of 6-10 dB (ffmpeg afftdn; never a neural denoiser).
+5. High-pass at 75 or 100 Hz.
+6. Voice EQ, 85 % toward the target, with boosts only where the voice dominates (+3 / -8 dB). The target is the first
+   that applies:
+   - the songs' vocal-stem EQ when the file has songs;
+   - otherwise the profile's studio vocal above 400 Hz with the speech spectrum below;
+   - otherwise the speech spectrum.
+7. De-ess, the music path's vocal compressor (3:1), slow leveler.
+8. Crowd taming in the gaps; speech frames move at most 1.5 dB.
+9. Band extension above a codec wall, 3 dB gentler than for music.
+10. Loudness: -16 LUFS for speech only, 4 dB under the music in a concert.
 
 **Mixed files.** Content classes are joined with 1 s crossfades. Gaps take the class of their neighbours.
 

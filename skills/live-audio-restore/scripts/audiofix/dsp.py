@@ -338,10 +338,10 @@ def fix_antiphase(y, block_s=60.0, overlap_s=4.0):
 
 
 # ------------------------------------------------------------------ band extension
-def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0):
+def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None):
     """SBR-style extension above a codec cut-off: the band just below the cut-off is shifted up
     (single-sideband, so hats, cymbals and sibilants keep their timing), repeated until ~top, then set so that
-    the band right above the cut-off sits at target_rel_db (power re 0.5-2 kHz)."""
+    the band right above the cut-off sits at target_rel_db (power re 0.5-2 kHz). mask: samples to calibrate on."""
     from scipy.fft import next_fast_len
     from scipy.signal import hilbert
     n = len(y)
@@ -366,7 +366,7 @@ def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0):
     if rolloff and rolloff > cutoff:
         ext = lowpass(ext, rolloff, order=2)
     lo, hi = cutoff + 300, min(cutoff + 2500, 18000)
-    have = band_rel(ext, lo, hi, ref_to=y)
+    have = band_rel(ext, lo, hi, ref_to=y) if mask is None else band_rel(ext[mask], lo, hi, ref_to=y[mask])
     g = float(10 ** ((target_rel_db - have) / 20))
     return (y + ext * g).astype(np.float32), {"gain_db": 20 * np.log10(g), "passes": passes,
                                                "band": [lo, hi], "target_rel_db": target_rel_db}

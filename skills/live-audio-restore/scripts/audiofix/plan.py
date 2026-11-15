@@ -25,6 +25,8 @@ def build(D):
     if not has_stems:
         P["notes"].append("no stem separation available: stem-level steps fall back to mix-level ones "
                           "(install demucs + torch for the full treatment)")
+    if D.get("content_warning"):
+        P["notes"].append(D["content_warning"])
 
     # ---------------------------------------------------------------- repairs on the raw mix
     R = P["repair"]
@@ -120,7 +122,18 @@ def build(D):
     sp = D.get("speech")
     if sp:
         m = sp["metrics"]
-        S = {}
+        S = {"mode": {"value": "v2",
+                      "why": "the talker's voice gets the music path's vocal treatment (v2): voice EQ toward the "
+                             "reference vocal at the music path's strength, its vocal compressor, de-limiting and "
+                             "band extension when measured; 'gentle' = half-way to the speech spectrum, +3 dB boosts"}}
+        plr = sp.get("loudness", {}).get("plr_db", 99)
+        songs_limited = bool(P.get("music")) and bool(P["music"]["delimit"]["enabled"])
+        S["delimit"] = {"enabled": bool(songs_limited and plr < 11), "depth": 1.5,
+                        "why": f"spoken parts: peak-to-loudness {plr} dB; songs in this file "
+                               + ("de-limited" if songs_limited else "not limited or absent")
+                               + ". Rule: de-limit the talk when the songs show the broadcast limiter (same chain) and "
+                                 "the talk's PLR is < 11 dB. A low PLR alone is not proof: steady crowd noise gives one "
+                                 "too. For a broadcast MC on its own, set speech.delimit.enabled=true"}
         stb = m.get("speech_to_background_db")
         vsh = sp.get("vocal_share")
         use_stem = has_stems and (vsh is None or vsh >= 0.3)
@@ -138,23 +151,38 @@ def build(D):
         S["highpass_hz"] = {"value": 100 if rum > -12 else 75,
                             "why": f"energy below 80 Hz is {rum} dB re 200-800 Hz (rule: > -12 dB means rumble)"}
         vb = m.get("voice_bandwidth", {}).get("cutoff_hz", 20000)
-        S["match"] = {"enabled": True, "alpha": 0.5, "lo_db": -6.0, "hi_db": 3.0, "cutoff_hz": vb,
+        mprof = profiles.load(D["profiles"]["music"])
+        song_chain = bool(P.get("music")) and bool(P["music"].get("stem_match", {}).get("enabled"))
+        target = "song_vocal" if song_chain else "studio_vocal" if mprof.get("stems", {}).get("vocals") else "ltass"
+        why_t = {"song_vocal": "the EQ the music path gives the singer's vocal stem in this file (same mic, PA and "
+                               "broadcast chain, so the same correction)",
+                 "studio_vocal": f"the studio vocal of the '{D['profiles']['music']}' reference above 300 Hz, the "
+                                 f"long-term speech spectrum below (speaking sits lower than singing)",
+                 "ltass": "the long-term speech spectrum (the music profile has no vocal statistics)"}[target]
+        S["match"] = {"enabled": True, "target": target, "alpha": 0.85, "lo_db": -8.0, "hi_db": 3.0, "cutoff_hz": vb,
+                      "chain_file": None,
                       "why": f"voice deviates {sp['tonal']['rms_db']} dB RMS from the speech spectrum "
-                             f"(by band: {sp['tonal']['by_band']}); half-way, boosts capped at +3 dB (a PA'd voice is "
-                             f"naturally thinner, big low boosts bring up room boom), none above the voice's {vb} Hz"}
+                             f"(by band: {sp['tonal']['by_band']}). Target: {why_t}. 85 % of the way like the music "
+                             f"path's overall match; boosts only where the voice dominates the mix and at most +3 dB "
+                             f"(big low boosts on a PA'd voice bring up the room), none above the voice's {vb} Hz"}
         S["vad"] = {"value": sp.get("vad", {}).get("method"), "why": "talker located with "
                     + ("Whisper word timings (crowd shouting has no words)" if sp.get("vad", {}).get("method") == "asr"
                        else "voicing/harmonicity (install faster-whisper for word-accurate timing)")}
         S["deess"] = {"enabled": True, "pct": 80, "max_cut_db": 6, "why": "tame sibilance after the presence lift"}
-        S["compress"] = {"ratio": 2.5, "att_ms": 5, "rel_ms": 120, "pct": 60, "why": "steady speech level"}
+        S["compress"] = {"ratio": 3.0, "att_ms": 4, "rel_ms": 90, "pct": 60,
+                         "why": "the music path's vocal compressor: steady, forward voice"}
         S["leveler"] = {"enabled": True, "range_db": 6.0, "window_s": 3.0,
                         "why": "even out loud and quiet sentences (slow, +-6 dB)"}
         gap = m.get("gap_minus_speech_db")
         S["crowd"] = {"enabled": gap is not None and gap > -8, "cap_db": 2.0, "floor_db": 18.0, "gap_db": 4.0,
                       "why": f"between sentences the crowd sits {gap} dB re speech (rule: > -8 dB means the crowd "
                              f"competes with the talk; cap it outside speech, never touch speech by more than 1.5 dB)"}
-        S["band_ext"] = {"enabled": False, "why": f"voice bandwidth {vb} Hz: a synthetic top on a voice tends to "
-                                                  f"lisp; off unless the listener asks for more air"}
+        bw = D["bandwidth"]
+        sext = bool(bw["brick_wall"] and bw["cutoff_hz"] < 18500)
+        S["band_ext"] = {"enabled": sext, "cutoff_hz": bw["cutoff_hz"], "below_ref_db": 3.0,
+                         "why": f"content stops at {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB wall"
+                                + (" (codec low-pass): rebuild the top as for the songs, 3 dB gentler (a loud synthetic "
+                                   "top on a voice can lisp)" if sext else ": no codec wall, nothing to rebuild")}
         P["speech"] = S
 
     # ---------------------------------------------------------------- master

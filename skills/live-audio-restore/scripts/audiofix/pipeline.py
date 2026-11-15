@@ -50,7 +50,8 @@ def restore(work, plan, log=print):
         if act is None:
             from . import measure
             act, _ = measure.speech_activity(st["vocals"] if st is not None else x, spc)
-        y_s, _ = speech.run(x, st, plan, mask_of(n, spc), act, 0.01, log)
+        y_s, _ = speech.run(x, st, plan, mask_of(n, spc), act, 0.01, log, work=work,
+                            chain=info.get("music", {}).get("vocal_eq"))
     y, rep = master.finalize(y_m, y_s, plan, log)
     out = os.path.join(work, "restored.wav")
     audio_io.save_wav(out, y, bits=24)

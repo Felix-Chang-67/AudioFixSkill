@@ -17,9 +17,14 @@ delivery message comes from these numbers, and the user's own listening of `AB.w
 | Music: mono compatible | Mono loss ≥ -1.5 dB | Same, or too much widening |
 | Speech: crowd no longer competes with the talk | Gap-vs-speech median ≤ min(input - 3, 0) dB | Talker mask too generous (fallback detector), or cap too loose |
 | Speech: the talker's words are recognised at least as well | Whisper on the mix, beam search with a seeded (reproducible) fallback, looping segments dropped: the recognised-word mass inside the talker mask (sum of word probabilities, roughly the number of words recognised correctly) ≥ 90 % of the input's | Denoise or EQ removed speech: back off |
-| Speech: closer to the speech spectrum | RMS deviation not up by more than 0.2 dB | Rare; inspect `compare.png` |
+| Speech: voice closer to its target | On the talker's frames, the RMS deviation from the target the render aimed at is not up by more than 0.2 dB. The target is the studio vocal above 300 Hz with the speech spectrum below, or the speech spectrum in gentle mode | Wrong music profile for this talker (its vocal statistics set the target), or denoise reshaping the voice |
 
-Only the checks that apply to the file's content are run.
+Only the checks that apply to the file's content are run. The voice-tone check is skipped in two cases; its numbers
+stay in `verification.json`:
+
+- **The songs' vocal EQ was copied** (`song_vocal`): there is no spectral target to measure against.
+- **The voice is the mix** (no stems, or separation lost the voice): the background owns part of the spectrum, and
+  removing it moves the measured "voice" too.
 
 ## Numbers to quote in the delivery
 

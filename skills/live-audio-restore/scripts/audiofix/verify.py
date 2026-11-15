@@ -3,8 +3,8 @@ and comparison plots. Nobody in this loop can listen except the user, so the num
 import json, os
 import numpy as np
 
-from . import SR, audio_io, dsp, loudness, measure, profiles
-from .analysis import cat, regions
+from . import SR, audio_io, dsp, loudness, measure, profiles, speech
+from .analysis import cat, mask_of, regions
 
 
 def _pick(score, starts, k, length):
@@ -111,17 +111,36 @@ def run(work, plan, log=print, make_plots=True):
                     f"Whisper on the mix, inside the talker mask: recognised-word mass {wmi:.1f} -> {wmo:.1f} "
                     f"({wi} words at mean log-prob {pi:.3f} -> {wo} at {po:.3f})")
         vb = D.get("speech", {}).get("metrics", {}).get("voice_bandwidth", {}).get("cutoff_hz")
-        ti = measure.tonal_deviation(xs, sprof["ltas"], vb, lo=100)
-        to = measure.tonal_deviation(ys, sprof["ltas"], vb, lo=100)
+        # the voice's tone, on the talker's frames, against the target this render aimed at
+        mt = np.repeat(act_full, int(0.01 * SR))[:n]
+        mt = np.concatenate([mt, np.zeros(n - len(mt), bool)]) & mask_of(n, spc)
+        xt, yt = (x[mt], y[mt]) if mt.sum() > 3 * SR else (xs, ys)
+        Sp = plan["speech"]
+        if speech.mode_of(Sp) == "gentle":
+            ref, label = np.asarray(sprof["ltas"]), "the speech spectrum"
+        elif Sp["match"].get("target") == "song_vocal":
+            ref, label = None, None                          # the songs' vocal EQ was copied: no spectral target
+        else:
+            t, kind = speech.voice_target(profiles.load(plan["profiles"]["music"]), sprof)
+            ref = t - t[(dsp.CENT >= 500) & (dsp.CENT <= 2000)].mean()
+            label = ("the studio vocal above 300 Hz, the speech spectrum below" if kind == "studio_vocal"
+                     else "the speech spectrum")
+        # When the voice is the mix (no stems, or separation lost it), the background owns part of the spectrum and
+        # denoising it moves the "voice" spectrum too: the voice's tone cannot be judged on its own, numbers only.
+        voice_is_mix = Sp["source"]["value"] == "mix" or not D.get("stems_dir")
+        ti = measure.tonal_deviation(xt, ref if ref is not None else sprof["ltas"], vb, lo=100)
+        to = measure.tonal_deviation(yt, ref if ref is not None else sprof["ltas"], vb, lo=100)
         V["speech"] = {"input": {"metrics": mi, "tonal": ti, "loudness": loudness.summary(xs)},
-                       "output": {"metrics": mo, "tonal": to, "loudness": loudness.summary(ys)}}
+                       "output": {"metrics": mo, "tonal": to, "loudness": loudness.summary(ys)},
+                       "tone_reference": label or "speech spectrum (for information; the songs' vocal EQ was applied)"}
         if plan["speech"]["crowd"]["enabled"] and "gap_minus_speech_db" in mi:
             chk("speech: crowd no longer competes with the talk",
                 mo.get("gap_minus_speech_db", 99) <= min(mi["gap_minus_speech_db"] - 3, 0),
                 f"gaps re speech, median {mi['gap_minus_speech_db']} -> {mo.get('gap_minus_speech_db')} dB, loudest 10 % "
                 f"{mi.get('gap_p90_minus_speech_db')} -> {mo.get('gap_p90_minus_speech_db')} dB")
-        chk("speech: closer to the speech spectrum", to["rms_db"] <= ti["rms_db"] + 0.2,
-            f"RMS deviation {ti['rms_db']} -> {to['rms_db']} dB")
+        if ref is not None and not voice_is_mix:
+            chk(f"speech: voice closer to its target ({label})", to["rms_db"] <= ti["rms_db"] + 0.2,
+                f"RMS deviation on the talker's frames {ti['rms_db']} -> {to['rms_db']} dB")
     V["checks"] = checks
 
     # A/B: music passages with the most voice (or level), spoken passages with the most talk

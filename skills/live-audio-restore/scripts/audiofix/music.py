@@ -4,7 +4,7 @@ de-limit -> polarity repair -> de-ess / drum transients / width -> per-stem tona
 stem balance (per section) -> per-stem dynamics -> bus glue -> overall tonal match (per section) ->
 band extension -> bass to mono. Returns the pre-master mix; loudness and limiting happen in master.py.
 """
-import os
+import json, os
 import numpy as np
 
 from . import SR, delimit, dsp, loudness, profiles
@@ -115,6 +115,12 @@ def run(x, st, plan, music_mask, work, log=print):
                 st[s] = dsp.apply_sectioned(st[s], [dsp.fir_from_curve(c) for c in curves], W)
                 for (a, b), c in zip(secs, curves):
                     log(f"[music] stem EQ {s:6s} {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
+                if s == "vocals":                       # the vocal chain's correction, reused for MCs (speech v2)
+                    info["vocal_eq"] = {"cent": [round(float(c), 2) for c in CENT], "sections": secs,
+                                        "curves": [[round(float(v), 2) for v in c] for c in curves],
+                                        "mean": [round(float(v), 2) for v in np.mean(curves, axis=0)]}
+                    with open(os.path.join(work, "vocal_eq.json"), "w") as fh:
+                        json.dump(info["vocal_eq"], fh)
         # 5. balance, per section
         if M["balance"]["enabled"] and prof.get("stems"):
             gains = {s: np.zeros(n, np.float32) for s in st}

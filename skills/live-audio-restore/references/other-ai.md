@@ -32,8 +32,11 @@ torch/demucs/numba.
 2. Tell the assistant:
    > Unzip the repo, read `skills/live-audio-restore/SKILL.md` and follow it. Run
    > `python3 skills/live-audio-restore/scripts/audiofix.py check`, then
-   > `auto my.wav --work out --no-stems`. Explain `out/diagnosis.md` and `out/verification.md` to me and give me
-   > `out/restored.wav` and `out/AB.wav`.
+   > `auto my.wav --work out --no-stems` (add `--content speech` if it is an MC / talk). Explain
+   > `out/diagnosis.md` and `out/verification.md` to me and give me `out/restored.wav` and `out/AB.wav`.
+
+   Without stems, songs and talk cannot be told apart automatically: the drum and bass stems are what separates
+   them, and Whisper alone cannot, because lyrics are words too. Tell the assistant which it is.
 3. What still works without stems, models and numba:
    - all measurements and the plan;
    - polarity repair and tone match on the whole mix;

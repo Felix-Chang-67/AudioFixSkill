@@ -69,6 +69,12 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
         log("[analyze] no stems: the plan will use the mix-only fallbacks")
 
     segs, feats = segments.classify(x, st, content=content)
+    if st is None and content == "auto":
+        # songs and talk are told apart by the rhythm section (drum + bass stems); Whisper alone cannot, lyrics are words
+        D["content_warning"] = ("no stems, so songs and talk cannot be told apart and the whole file is treated as "
+                                "music. For an MC / talk file rerun analyze with --content speech; for a concert with "
+                                "songs and MCs, install demucs + torch")
+        log(f"[analyze] WARNING: {D['content_warning']}")
     if st is not None and content == "auto" and cap["asr"]:
         # where there is no rhythm section, ask Whisper whether someone is talking (robust to separation failures)
         low = feats["rhythm"] < 0.08
