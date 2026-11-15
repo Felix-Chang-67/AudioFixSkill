@@ -154,7 +154,7 @@ phase by band), the 3-10 kHz share by stem, and the tone deviation against the m
 | Drum transients | Stems available | 0.35 / max 2.5 dB with de-limiting; 0.55 / 4.5 dB if limited but no de-limiter; 0.25 / 2 dB otherwise |
 | Polarity repair | A stem has 10 % or more of its energy in 4 s windows with L-R correlation below -0.3 | Only that stem. Without stems, the mix when 10 % or more of mid-band windows are negative |
 | De-ess (vocal) | Vocal stem present | Max cut 9 dB if the vocal carries 50 % or more of the 3-10 kHz energy, or 5-8 kHz sits more than 4 dB above the profile; else 6 dB. Acts only on the brightest 20 % of moments |
-| Widen guitars/keys | Stereo source and stems | Side +3 dB above 150 Hz. Never on mono or near-mono |
+| Widen guitars/keys | Stereo source, stems, and the drum stem's median L-R correlation ≥ 0.8 (a mixed image) | Side +3 dB above 150 Hz. Never on mono or near-mono. Off on a diffuse, room-miked recording (drums below 0.8): it is already wide. An audience recording measured drums 0.65, vocal 0.32, side only 3.8 dB under mid; broadcast mixes measured 0.98-1.0 |
 | Per-stem tone match | Stems and a profile with stem statistics | 60 % toward the reference stem. Boosts at most +3 dB (+4 dB below 150 Hz), cuts at most -6 dB. Boost only where the stem carries at least 5-30 % of the band (no lifting of bleed). Bass and kick never cut below 120 Hz |
 | Stem balance | Same | Each stem halfway to its reference share of the mix, at most ±3 dB, per section |
 | Stem dynamics | Stems | Drum peaks held at drum loudness +11 dB (1 ms lookahead); bass 3:1, vocal 3:1, guitars 2.5:1; bus 1.8:1 |

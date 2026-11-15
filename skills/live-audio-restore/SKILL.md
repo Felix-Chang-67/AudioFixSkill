@@ -10,6 +10,7 @@ description: >-
   loudness-matched A/B file. Use it whenever someone wants to fix, restore, clean up, remaster or improve the
   sound of a live recording or a talk clip, even if they only say it sounds bad, muddy, harsh, squashed, thin,
   phasey, too quiet or drowned by the crowd.
+license: MIT
 compatibility: >-
   Any agent that can run shell commands with Python 3.9+, numpy and scipy. ffmpeg is recommended; the full
   treatment adds demucs+torch, the De-limiter model and faster-whisper (all CPU-friendly). Missing pieces

@@ -85,9 +85,14 @@ def build(D):
             M["transients"] = {"enabled": False, "why": "needs a drum stem"}
             M["deess"] = {"enabled": False, "why": "needs a vocal stem"}
         kind = mu["stereo"]["kind"]
-        M["widen"] = {"enabled": bool(st) and kind == "stereo", "side_db": 3.0,
-                      "why": f"{kind} source" + ("; the guitar/keys layer gets +3 dB of side above 150 Hz after the "
-                                                "polarity repair" if kind == "stereo" else ": no synthetic width")}
+        drum_corr = (st or {}).get("drums", {}).get("stereo", {}).get("corr_median", 1.0)
+        diffuse = drum_corr < 0.8
+        M["widen"] = {"enabled": bool(st) and kind == "stereo" and not diffuse, "side_db": 3.0,
+                      "why": f"{kind} source, drum stem's median L-R correlation {drum_corr}"
+                             + (": no synthetic width" if kind != "stereo" else
+                                " (< 0.8: a diffuse, room-miked image, already wide): no extra width" if diffuse else
+                                ": a mixed image; the guitar/keys layer gets +3 dB of side above 150 Hz after the "
+                                "polarity repair")}
         prof = profiles.load(D["profiles"]["music"])
         pst = bool(st) and bool(prof.get("stems"))
         M["stem_match"] = {"enabled": pst, "alpha": 0.6, "lo_db": -6.0, "hi_db": 3.0, "hi_low_db": 4.0,

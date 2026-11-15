@@ -87,6 +87,16 @@ stem is scaled (`amount`) and capped (`max_db`). It is light when de-limiting al
 **Width.** The guitar/keys stem gets +3 dB of side signal above 150 Hz, after polarity repair. Never on a mono or
 near-mono source: that would be synthetic stereo.
 
+It is also off when the drum stem's median L-R correlation is under 0.8. That is a diffuse, room-miked recording,
+for example an audience pair, and it is already wide. More side there only adds room and costs mono compatibility.
+One such recording measured:
+
+- drums 0.65 and vocal 0.32;
+- side only 3.8 dB under mid;
+- mono loss -1.6 dB.
+
+Broadcast and board mixes measure 0.98-1.0 on the drums.
+
 ## 4. Per-stem tone match (`stem_match`)
 
 **Why.** Global EQ cannot cut a harsh vocal without dulling cymbals, or lift a buried kick without thickening the
