@@ -20,8 +20,13 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
 4. You cannot hear audio:
    - Report only changes that `verification.md` measured.
    - Hand over `restored.wav`, `restored.m4a` and `AB.wav`, and ask the user to listen to `AB.wav` first.
-5. Never overwrite the user's source file; everything goes into the work folder.
-6. Explain the result in the user's language, in plain words.
+5. Trust the default plan:
+   - Edit it only for a WARN, a measurement the rules missed, or the listener's words, and report every edit with
+     its reason.
+   - Hand-tuned plans made results depend on the assistant: 3 dB apart in loudness, 3 LU in dynamics.
+   - Act on every WARN, and on the `[next]` lines `restore` prints, before delivering.
+6. Never overwrite the user's source file; everything goes into the work folder.
+7. Explain the result in the user's language, in plain words.
 
 ## Working on the code
 

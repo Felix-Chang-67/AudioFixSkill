@@ -50,6 +50,34 @@ def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low):
     return g
 
 
+def macro_restore(x, y, mask, max_db=6.0, hop_s=0.5, win_s=3.0, smooth_s=4.0):
+    """Put the original's slow loudness contour back on the processed music: K-weighted 3 s level of input and
+    output, each relative to its own median over the music, difference smoothed over 4 s and applied as a slow gain
+    (within +-max_db). Tone EQ, stem balance and compression all change how loud a quiet intro is next to a chorus;
+    this undoes that at the scale of seconds without touching the hits or the tone."""
+    from scipy.ndimage import uniform_filter1d
+    h = int(hop_s * SR)
+    n = min(len(x), len(y)) // h
+    if n < 20:
+        return y, {"applied": False}
+
+    def env(z):
+        k = loudness.kweight(z[:n * h])
+        p = (k.astype(np.float64) ** 2).sum(axis=1).reshape(n, h).mean(axis=1)
+        return 10 * np.log10(uniform_filter1d(p, max(1, int(win_s / hop_s))) + 1e-12)
+
+    ex, ey = env(x), env(y)
+    mf = mask[:n * h].reshape(n, h).mean(axis=1) > 0.5
+    if mf.sum() < 10:
+        return y, {"applied": False}
+    valid = mf & (ex > np.median(ex[mf]) - 30)
+    d = np.where(valid, (ex - np.median(ex[valid])) - (ey - np.median(ey[valid])), 0.0)
+    d = np.clip(uniform_filter1d(d, max(1, int(smooth_s / hop_s))), -max_db, max_db)
+    g = np.interp(np.arange(len(y)), (np.arange(n) + 0.5) * h, d)
+    return (y * undb(g)[:, None]).astype(np.float32), {"mean_abs_db": round(float(np.mean(np.abs(d[valid]))), 2),
+                                                       "max_db": round(float(np.max(np.abs(d[valid]))), 2)}
+
+
 def _fmt(g):
     return " ".join(f"{f}:{np.interp(np.log(f), np.log(CENT), g):+.1f}" for f in (50, 80, 125, 250, 500, 1000, 2000,
                                                                                    4000, 6300, 10000, 12500))
@@ -172,4 +200,9 @@ def run(x, st, plan, music_mask, work, log=print):
     # 9. bass to mono
     if M.get("mono_bass_hz"):
         y = dsp.mono_bass(y, M["mono_bass_hz"])
+    # 10. open recordings: the original's loudness contour back (quiet parts stay quiet)
+    if M.get("macro", {}).get("enabled"):
+        y, a = macro_restore(x, y, music_mask, M["macro"].get("max_db", 6.0))
+        info["macro"] = a
+        log(f"[music] loudness contour of the original restored: {a}")
     return y.astype(np.float32), info

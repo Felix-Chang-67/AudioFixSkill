@@ -1,11 +1,14 @@
 # Music path: each step in detail
 
-Code: `scripts/audiofix/music.py` (steps 1-9). The repairs on the raw mix live in `pipeline.py`; loudness lives in
+Code: `scripts/audiofix/music.py` (steps 1-10). The repairs on the raw mix live in `pipeline.py`; loudness lives in
 `master.py`. Keys refer to `plan.json` → `music`.
 
-The music path is the "strong remaster" that was validated against a hand-made version of the same pipeline:
-the long-term spectra of the two agreed within 0.13 dB RMS. It aims for the tone and dynamics of the artist's studio
-masters, not just a cleaner copy of the broadcast.
+The music path is the "strong remaster". On a limited broadcast it was validated against a hand-made version of the
+same pipeline: the long-term spectra of the two agreed within 0.13 dB RMS.
+
+- **Tone:** it aims for the artist's studio masters, not just a cleaner copy of the broadcast.
+- **Dynamics:** it depends on the source. A limited one is opened up and mastered loud. An open one keeps its own
+  dynamics (steps 6 and 10, and the master).
 
 ## 0. Separation
 
@@ -66,8 +69,18 @@ cannot simply expand it: you would need to know what the limiter did.
 
 The result is still wide (correlation 0.74), not mono.
 
-**Only the flagged stems.** A centred vocal is in phase and would be left alone anyway, but restricting the repair to
-the stem that has the problem avoids touching bleed.
+**Which stems.** A stem is repaired when either test holds:
+
+- **A whole reversed layer:** 10 % or more of its energy sits in 4 s windows with L-R correlation below -0.3.
+- **Anti-phase in some bands only:** the repair's own detector finds 5 % or more of its energy in coherent anti-phase
+  bins, and the stem loses more than 1 dB in mono. The detector runs on up to 120 s spread over the stem.
+
+  On an audience recording, the guitar stem was reversed only below 2.5 kHz, and the vocal stem only at 150-400 Hz.
+  The window test saw 0 % and 3.7 %; the detector saw 6.0 % and 8.9 %. Repairing both took the stems' mono loss from
+  -1.74 and -2.04 dB to -1.44 and -1.55 dB.
+
+Drum and bass stems measured 0-0.1 % on every recording. Because only coherent anti-phase bins are rotated, a
+repaired stem with little anti-phase barely changes: everything in phase or merely decorrelated is left as it was.
 
 ## 3. De-ess (`deess`), drum transients (`transients`), width (`widen`)
 
@@ -137,14 +150,20 @@ guitar layer was 3.5 dB over the vocal; the guitars got -2.9 dB and the vocal +2
 **Why per stem.** After de-limiting, the peaks come back mostly on drum hits: 97 % of the top 0.1 % peaks in the
 example. A master limiter would then duck the whole mix on every hit, which is audible pumping.
 
-1. **Drum peaks.** The drum stem alone goes through a 1 ms-lookahead limiter with its ceiling at the drum stem's
-   loudness +11 dB. It shaves the first milliseconds of each hit; the body of the hit, which carries the punch,
-   stays.
-2. **Bass 3:1, vocal 3:1, guitars 2.5:1.**
+1. **Drum peaks.** The drum stem alone goes through a 1 ms-lookahead limiter. It shaves the first milliseconds of
+   each hit; the body of the hit, which carries the punch, stays. The ceiling is set relative to the drum stem's own
+   loudness:
+   - +11 dB on a limited source, where the de-limiter brought the peaks back;
+   - +15 dB on an open one, whose drum peaks are natural. At +11 dB, an open audience recording lost more than 1 dB
+     on 18 % of the time (up to 11 dB), and 1.8 dB of 3 s crest.
+2. **Compressors per stem.**
+   - Ratios on a limited source: bass 3:1, vocal 3:1, guitars 2.5:1. On an open one: 2:1, 2:1, 1.5:1.
    - Feed-forward and stereo-linked, with a 6 dB soft knee.
    - The threshold is a percentile of the detector level (70, 60 and 60), so it adapts to the file.
    - Make-up gain restores the RMS, so only the shape of the level changes.
-3. **Bus glue.** 1.8:1, 25 / 250 ms, about 0.3 dB average: it only binds the mix together.
+3. **Bus glue.**
+   - Limited sources: 1.8:1, 25 / 250 ms, about 0.3 dB average. It only binds the mix together.
+   - Open sources: none.
 
 ## 7. Overall tone match (`match`)
 
@@ -185,6 +204,32 @@ headphones.
 Side below 100 Hz is removed (4th-order high-pass, zero phase). The low end tightens, mono playback improves, and no
 low-frequency phase fights reach the limiter.
 
+## 10. Loudness contour (`macro`, open recordings)
+
+**Why.** The song's quiet intro, its breaks and its build-ups are part of the performance. On an open recording
+(LRA 10 LU), every step above nudged them:
+
+| Change | Loudness range left |
+|---|---|
+| The limited-source dynamics | 6.4 LU |
+| Light compression | 7.5 LU |
+| No compression at all | 8.0 LU |
+
+Even without compression, 2 LU went. The tone EQ and the stem balance change how loud a bright guitar intro is next
+to a bass-heavy chorus.
+
+**How.**
+
+1. Take the K-weighted 3 s level of the input and of the processed music every 0.5 s, each relative to its own
+   median over the music.
+2. Smooth the difference over 4 s and clip it to ±6 dB (`max_db`).
+3. Apply it as a slow gain.
+
+At this time scale nothing changes in the hits or the tone, only how loud each part of the song is next to the
+others. The overall level is left to the master.
+
+**Off for limited sources:** their contour is the limiter's, not the band's.
+
 ## Repairs on the raw mix (both paths)
 
 | Repair | When |
@@ -198,8 +243,17 @@ Stems receive the same high-pass and notches.
 ## Loudness (`master`)
 
 Music gets the **loudest** integrated loudness, searched from -8 to -14 LUFS in 0.5 dB steps, at which the
-lookahead limiter (4x inter-sample-aware, 1.5 ms ramp, 120 ms release, ceiling -1 dBTP) would reduce more than 1 dB
-for at most 8 % of the time and more than 2 dB for at most 1.5 %.
+lookahead limiter would reduce more than 1 dB for at most a set share of the time, and more than 2 dB for at most
+another:
+
+| Source | Above 1 dB | Above 2 dB | Result |
+|---|---|---|---|
+| Limited | 8 % | 1.5 % | As loud as a modern master without audible limiting |
+| Open | 2.5 % | 0.5 % | The limiter stays almost idle; the dynamics survive |
+
+The limiter is 4x inter-sample-aware, with a 1.5 ms ramp, 120 ms release and a ceiling of -1 dBTP.
+
+On the open example, the open-source criteria kept 14.5 dB of crest (source 14.8) at -13 LUFS (source -15.4).
 
 - Why this measure: "busy time" counts even 0.01 dB of release tail, and "maximum reduction" is set by one freak
   peak. Time spent above 1 and 2 dB is what you can hear.

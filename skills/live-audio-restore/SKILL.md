@@ -10,7 +10,7 @@ description: >-
   loudness-matched A/B file. Use it whenever someone wants to fix, restore, clean up, remaster or improve the
   sound of a live recording or a talk clip, even if they only say it sounds bad, muddy, harsh, squashed, thin,
   phasey, too quiet or drowned by the crowd.
-license: MIT
+license: MIT (see LICENSE.txt)
 compatibility: >-
   Any agent that can run shell commands with Python 3.9+, numpy and scipy. ffmpeg is recommended; the full
   treatment adds demucs+torch, the De-limiter model and faster-whisper (all CPU-friendly). Missing pieces
@@ -43,16 +43,24 @@ verify**. The plan is plain JSON, so you or the user can read and change it befo
    numbers, and ask the user to listen to `AB.wav`.
 2. **Diagnose before fixing.** Each step in the plan carries the measurement that switched it on. If a step looks
    wrong for this material, change the plan and say why. Don't stack extra effects on top to compensate.
-3. **Never overwrite the source.** Work in a work folder. Deliver a lossless WAV, an AAC copy and the A/B file.
-4. **Some things look helpful and are harmful:**
+3. **Trust the defaults; edit only for a reason.** A reason is a WARN, a measurement the rules missed, or the
+   listener's words.
+   - The rules already encode what was learned on real recordings: limited or open dynamics, a whole reversed layer
+     or anti-phase in a few bands, a mixed or a room-miked stereo image.
+   - Two assistants hand-tuning the same song with this skill delivered results 3 dB apart in loudness and 3 LU apart
+     in dynamics. Write every edit and its reason into the delivery message.
+4. **Never overwrite the source.** Work in a work folder. Deliver a lossless WAV, an AAC copy and the A/B file.
+5. **Some things look helpful and are harmful:**
    - Neural denoisers on live speech: through a PA in a reverberant hall they remove the speech along with the
      noise.
-   - Synthetic stereo on a mono source.
+   - Synthetic stereo on a mono source, or extra width on a room-miked recording that is already wide.
    - Matching the tone of a different genre.
    - A loudness target the limiter can only reach by squashing.
+   - Flattening an open recording: its quiet intros and breaks are part of the performance.
+   - A "safe" result quieter than the original: it reads as "nothing changed".
 
-   The pipeline avoids all four by default. Keep it that way unless the user asks for one.
-5. Explain results in the user's language, in plain terms: what was wrong, what changed, how big the change is,
+   The pipeline avoids all of these by default. Keep it that way unless the user asks for one.
+6. Explain results in the user's language, in plain terms: what was wrong, what changed, how big the change is,
    and what could not be fixed.
 
 ## Quick start
@@ -140,7 +148,20 @@ Read it the first time you use the skill, and whenever a verdict surprises you.
 
 ### 4. Review and edit the plan
 
-`plan.json` holds one block per step, each with a `why`. Edit it directly, or override at render time:
+`plan.json` holds one block per step, each with a `why`. Read the `why` of these five decisions before rendering;
+they matter most:
+
+1. **Limited or open** (`music.delimit`, `music.dynamics`, `music.macro`, `master`):
+   - A limited source (LRA < 4 LU or PLR < 11 dB) is de-limited, gets per-stem peak control and a loud master.
+   - An open one keeps its dynamics: light compression, the original's loudness contour put back, and a limiter
+     that stays almost idle.
+2. **Anti-phase** (`music.antiphase.stems`): a whole reversed layer, or anti-phase confined to some bands. Only
+   the anti-phase bins are rotated, so a false positive costs little and a miss costs mono compatibility.
+3. **Width** (`music.widen`): only on a mixed (board or broadcast) image, never on a room-miked one.
+4. **Codec wall** (`music.band_ext`): the top above the cut-off is rebuilt.
+5. **Reference** (`profiles.music`): the target for every tone decision.
+
+Edit the plan directly, or override at render time:
 
 ```bash
 python3 scripts/audiofix.py restore --work WORK --set music.delimit.depth=1.5 music.widen.enabled=false
@@ -160,7 +181,8 @@ Common edits:
 | Keep more audience between sentences | `speech.crowd.cap_db=-2` or `speech.crowd.enabled=false` |
 | Lighter, more natural voice treatment on MCs | `speech.mode=gentle` |
 | MC from a show whose songs were restored separately | `speech.match.target=song_vocal speech.match.chain_file=SONGWORK/vocal_eq.json` |
-| Louder or more dynamic master | `master.over1_max_pct` and `master.over2_max_pct` (8 and 1.5 by default) |
+| Louder or more dynamic master | `master.over1_max_pct` and `master.over2_max_pct`: 8 and 1.5 for limited sources, 2.5 and 0.5 for open ones |
+| Denser, more "produced" sound on an open recording | `music.macro.enabled=false`; stronger `music.dynamics` ratios |
 
 ### 5. Restore and verify
 
@@ -177,6 +199,8 @@ Every check is PASS or WARN, with before and after numbers. Investigate each WAR
 |---|---|---|
 | Music not closer to the reference tone | Wrong genre profile, or a very short music part | Build an artist profile; or lower `music.match.alpha` |
 | Dynamics squashed further | Loudness target too high for this material | Lower `master.over1_max_pct` / `over2_max_pct` |
+| Quiet and loud parts not kept apart (open recording) | Compression or a hand edit flattened the song | Check that `music.macro` is on and `music.dynamics` is light; lower the master criteria |
+| Quieter than the original (open recording) | Master criteria set too strict by hand | Raise `master.over1_max_pct` / `over2_max_pct` toward 2.5 / 0.5 |
 | Anti-phase left in the mids | An anti-phase layer in a stem that was not flagged | Add the stem to `music.antiphase.stems` |
 | Mono loss | Same, or too much width | Lower `music.widen.side_db` |
 | Crowd still competes with the talk | Talker found by voicing, not words | Install faster-whisper; or `speech.crowd.cap_db=4`, `floor_db=24` |
@@ -189,11 +213,12 @@ curve below the input's cut-off. Above the cut-off, the rebuilt top should conti
 ### 7. Deliver
 
 Send `restored.wav` (lossless), `restored.m4a` (for phones) and `AB.wav`, and ask the user to listen to `AB.wav`
-first. In the message:
+first. The last `[next]` lines of `restore` repeat this. In the message:
 
 - What was wrong, in plain words, with the key numbers.
 - What each step did, with before and after numbers from `verification.md`.
 - What was not fixed or cannot be fixed: invented content, crowd under the words, codec holes.
+- Every edit you made to the plan, with its reason.
 - Which knobs exist if they want it different.
 
 Do not describe a change you did not measure.
@@ -216,16 +241,19 @@ Map what the user says to a knob, change one thing at a time, re-render and send
 **Music** (`references/music-path.md`):
 
 1. Repairs on the raw mix: 20 Hz high-pass, dehum, declip.
-2. De-limit: the network's gain curve at 1.5-2x depth, on every stem.
-3. Polarity repair of anti-phase stems.
-4. De-ess the vocal; lift drum transients; widen the guitar/keys layer.
+2. De-limit (limited sources): the network's gain curve at 1.5-2x depth, on every stem.
+3. Polarity repair of anti-phase stems: whole reversed layers, or anti-phase in some bands only.
+4. De-ess the vocal; lift drum transients; widen the guitar/keys layer (mixed images only).
 5. Per-stem tone match, 60 % toward the reference stems, per section.
 6. Stem balance, halfway to the reference ratios.
-7. Shave drum peaks on the drum stem; compress bass, vocal and guitars separately; light bus glue.
+7. Shave drum peaks on the drum stem; compress bass, vocal and guitars separately; bus glue. Firm on limited
+   sources, light on open ones.
 8. Overall tone match, 85 %, per section.
 9. Band extension above the codec cut-off.
 10. Bass below 100 Hz to mono.
-11. Perceptual loudness and a true-peak limiter at -1 dBTP.
+11. Open recordings: the original's loudness contour put back, so quiet parts stay quiet.
+12. Perceptual loudness and a true-peak limiter at -1 dBTP: as loud as a modern master for limited sources; for
+    open ones the limiter stays almost idle.
 
 **Speech** (`references/speech-path.md`). The voice gets the music path's vocal treatment (`speech.mode` v2; `gentle`
 is the earlier, lighter path):

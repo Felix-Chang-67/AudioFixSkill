@@ -103,3 +103,36 @@ before changing a default.
 
 24. **Floating-point smoothing can go slightly negative.** The log of a negative is NaN, and NaN gains silently ruin
     audio. Clamp before `log10`.
+
+## Learned from an open recording and a second assistant
+
+The same audience recording was restored twice with this skill: once by Claude, once by ChatGPT.
+
+25. **Settings tuned on a limited broadcast flatten an open recording.**
+    - What happened: the defaults came from a limited broadcast. On an open recording (LRA 10 LU, PLR 15.5 dB), the
+      drum limiter at +11 dB shaved more than 1 dB for 18 % of the time. The firm compressors and a loud master
+      took the range to 6.4 LU and raised the quiet intro by 4-5 dB against the choruses.
+    - The only dynamics check then was the 3 s crest, and it passed.
+    - What the pipeline does now:
+      - open recordings get light dynamics and the contour step;
+      - their limiter stays almost idle;
+      - verify checks the loudness range (LRA) of open recordings.
+26. **Changing the tone changes the dynamics too.** With no compression at all, the tone EQ and stem balance alone
+    still took 2 LU off. A bright intro gains loudness from a presence boost that a bass-heavy chorus does not get.
+    Hence the contour step after all processing, not just lighter compressors.
+27. **A "safe" result can be quieter than the original.** The other assistant's version came out at -16.0 LUFS
+    against a -15.4 LUFS source, with the rebuilt top 7-10 dB under the reference. For open recordings, verify now
+    warns when the result is quieter than the original (pitfall 1 again).
+28. **Hand-tuning makes results depend on the assistant.**
+    - The two versions used the same method: their stem balances agreed within 0.7 dB. They still differed by 3 dB in
+      loudness, 2.6 LU in loudness range, and up to 7 dB in the rebuilt top, because of different hand edits.
+    - The decisions that were hand-tuned are now rules: limited or open, partial anti-phase, room-miked width.
+    - Edit only for a WARN, a measurement the rules missed, or the listener's words, and report every edit.
+29. **Anti-phase in a few bands slips past a window-correlation test.**
+    - What happened: a guitar stem reversed only below 2.5 kHz showed 0 % of its energy in anti-phase 4 s windows.
+    - The repair's own detector measures coherent anti-phase energy per bin, and now decides together with the
+      stem's mono loss.
+30. **Widening an already-wide recording.**
+    - A room-miked audience pair is wide by nature: its drums measured an L-R correlation of 0.65, its side only
+      3.8 dB under mid. Adding width there costs mono compatibility and adds room.
+    - Width is now added only to mixed images, with drums at a correlation of 0.8 or more.

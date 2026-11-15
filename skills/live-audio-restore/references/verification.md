@@ -13,6 +13,8 @@ delivery message comes from these numbers, and the user's own listening of `AB.w
 | No new clipping | Flat runs/min ≤ max(5, input) | Something overloaded before the limiter |
 | Music: closer to the reference tone | RMS deviation 50 Hz-16 kHz (below the cut-off) decreased | Wrong profile for this music, or a very short music part |
 | Music: dynamics not squashed further | 3 s crest ≥ input - 0.5 dB | Loudness target too high, or de-limiting off |
+| Music: the song's quiet and loud parts kept apart (open recordings only) | Loudness range (LRA) ≥ input - 2 LU | The song was flattened: compression too firm, or the contour step off |
+| Music: not quieter than the original (open recordings only) | Integrated loudness ≥ input - 0.5 dB | Master criteria set too strict: a quieter result reads as "nothing changed" |
 | Music: no anti-phase left in the mids | Worst 4 s mid-band correlation ≥ -0.2 | An anti-phase stem was not repaired |
 | Music: mono compatible | Mono loss ≥ -1.5 dB | Same, or too much widening |
 | Speech: crowd no longer competes with the talk | Gap-vs-speech median ≤ min(input - 3, 0) dB | Talker mask too generous (fallback detector), or cap too loose |
@@ -43,6 +45,7 @@ Quote the few that match what the user complained about:
 |---|---|
 | Muddy / harsh / thin | Deviation at the relevant bands |
 | Squashed | Crest and PLR |
+| Flat, no build-up (open recordings) | LRA |
 | Phasey | Correlation and mono loss |
 | The crowd drowns the MC | Gap-vs-speech and word counts |
 
@@ -50,8 +53,9 @@ Quote the few that match what the user complained about:
 
 `AB.wav` holds up to four 7 s passages:
 
-- music passages with the most energy;
-- spoken passages with the most talk.
+- the music passages with the most energy, plus the quietest passage that is still music, which reveals hiss,
+  pumping and raised quiet parts;
+- the spoken passages with the most talk.
 
 Each pair plays the **input, a 0.6 s pause, then the restored version**, with 1.4 s between pairs. Within each pair
 the input is matched to the restored version's loudness, so the comparison is not "louder sounds better". The start
@@ -90,8 +94,11 @@ Offer it when asking for feedback.
   - A codec wall shows as a flat black ceiling.
   - Anti-phase passages show as side-minus-mid near 0 dB.
   - MC crowds show as level spikes between sentences.
-- `compare.png` (from verify): long-term spectra of input, restored and profile, plus before and after spectrograms
-  of the A/B passages.
+- `compare.png` (from verify): long-term spectra of input, restored and profile; before and after spectrograms of
+  the A/B passages; and a last row with the short-term loudness over the whole file and its spread around the
+  median.
   - The restored curve should follow the profile closely below the input's cut-off.
   - The rebuilt top should continue the profile's slope.
   - Spoken parts should show quieter gaps between words.
+  - On an open recording, the restored loudness curve should keep the input's shape. Quiet intros and breaks should
+    stay as far below the choruses as before, and the spread should be about as wide.

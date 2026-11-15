@@ -68,6 +68,13 @@ def run(work, plan, log=print, make_plots=True):
         chk("music: closer to the reference tone", to["rms_db"] < ti["rms_db"], f"RMS deviation {ti['rms_db']} -> {to['rms_db']} dB")
         chk("music: dynamics not squashed further", lo["crest3s_db"] >= li["crest3s_db"] - 0.5,
             f"3 s crest {li['crest3s_db']} -> {lo['crest3s_db']} dB, PLR {li['plr_db']} -> {lo['plr_db']} dB")
+        if li["lra_lu"] >= 4 and li["plr_db"] >= 11:
+            # an open (not limited) recording: the song's quiet and loud parts must keep their distance, and the
+            # result must not come out quieter than the original (a quieter "restoration" reads as nothing changed)
+            chk("music: the song's quiet and loud parts kept apart", lo["lra_lu"] >= li["lra_lu"] - 2.0,
+                f"loudness range {li['lra_lu']} -> {lo['lra_lu']} LU (open recording: at most 2 LU less)")
+            chk("music: not quieter than the original", lo["lufs"] >= li["lufs"] - 0.5,
+                f"{li['lufs']} -> {lo['lufs']} LUFS")
         if so.get("kind") != "mono":
             chk("music: no anti-phase left in the mids", so.get("mid_corr_min", 1) >= -0.2,
                 f"worst 4 s mid-band correlation {si.get('mid_corr_min')} -> {so.get('mid_corr_min')}")
@@ -143,17 +150,25 @@ def run(work, plan, log=print, make_plots=True):
                 f"RMS deviation on the talker's frames {ti['rms_db']} -> {to['rms_db']} dB")
     V["checks"] = checks
 
-    # A/B: music passages with the most voice (or level), spoken passages with the most talk
+    # A/B: the loudest music passages plus the quietest one that is still music (quiet parts show hiss, pumping and
+    # raised levels), and the spoken passages with the most talk
     picks = []
     hopw = int(SR)
     starts = np.arange(0, max(1, n - 8 * SR), hopw) / SR
     lvl = np.array([np.mean(x[int(t * SR):int(t * SR) + 7 * SR].astype(np.float64) ** 2) for t in starts])
-    for regs, k in ((mus, 2 if spc else 4), (spc, 2 if mus else 4)):
+    for regs, k, label in ((mus, 2 if spc else 4, "music"), (spc, 2 if mus else 4, "speech")):
         if not regs:
             continue
         inside = np.array([any(a <= t and t + 7 <= b for a, b in regs) for t in starts])
         if inside.any():
-            picks += _pick(np.where(inside, lvl, -1), starts, k, 7.0)
+            got = _pick(np.where(inside, lvl, -1), starts, k - 1 if label == "music" else k, 7.0)
+            if label == "music":
+                floor = np.percentile(lvl[inside], 50) * 10 ** (-25 / 10)        # quiet, not silence
+                quiet = np.where(inside & (lvl > floor), -lvl, -np.inf)
+                quiet[[i for i, t in enumerate(starts) if any(abs(t - u) < 9 for u in got)]] = -np.inf
+                if np.isfinite(quiet).any():
+                    got.append(float(starts[int(np.argmax(quiet))]))
+            picks += got
     picks = sorted(set(picks))
     if picks:
         ab_file(x, y, picks, os.path.join(work, "AB.wav"))
@@ -178,8 +193,22 @@ def plots(x, y, plan, picks, path):
     import matplotlib.pyplot as plt
     from scipy.signal import stft
     segs = plan["segments"]
-    rows = 1 + min(2, len(picks))
+    rows = 2 + min(2, len(picks))
     fig, ax = plt.subplots(rows, 2, figsize=(15, 4 * rows), squeeze=False)
+    # last row: short-term loudness over the file, and its spread around the median (dynamics at a glance)
+    def st_loud(z):
+        return np.array([loudness.integrated(z[i:i + 3 * SR]) for i in range(0, max(1, len(z) - 3 * SR), SR)])
+    li, lo = st_loud(x), st_loud(y)
+    ax[-1, 0].plot(li, "C0", lw=1, label="input"); ax[-1, 0].plot(lo, "C3", lw=1, label="restored")
+    ax[-1, 0].set_ylim(max(-60, np.nanpercentile(np.r_[li, lo], 1) - 3), np.nanmax(np.r_[li, lo]) + 2)
+    ax[-1, 0].legend(); ax[-1, 0].grid(alpha=.3); ax[-1, 0].set_xlabel("s")
+    ax[-1, 0].set_title("short-term loudness (3 s, LUFS): an open recording should keep its shape")
+    for z, c, lab in ((li, "C0", "input"), (lo, "C3", "restored")):
+        v = z[np.isfinite(z) & (z > -70)]
+        if len(v):
+            ax[-1, 1].hist(v - np.median(v), bins=60, range=(-25, 10), histtype="step", color=c, lw=1.5, label=lab)
+    ax[-1, 1].legend(); ax[-1, 1].set_xlabel("LU around the median")
+    ax[-1, 1].set_title("spread of short-term loudness (narrower = more compressed)")
     for col, (label, regs, pname) in enumerate((("music", regions(segs, "music"), plan["profiles"]["music"]),
                                                 ("speech", regions(segs, "speech"), plan["profiles"]["speech"]))):
         a = ax[0, col]
@@ -190,7 +219,7 @@ def plots(x, y, plan, picks, path):
             a.semilogx(dsp.CENT, dsp.ltas(cat(y, regs)), "C3", label="restored")
             a.legend(); a.grid(alpha=.3, which="both"); a.set_xlim(30, 20000)
         a.set_title(f"{label}: long-term spectrum (dB re 0.5-2 kHz)")
-    for r, t in enumerate(picks[:rows - 1], start=1):
+    for r, t in enumerate(picks[:rows - 2], start=1):
         for col, (name, z) in enumerate((("input", x), ("restored", y))):
             seg = z[int(t * SR):int((t + 7) * SR)].mean(axis=1)
             f, tt, Z = stft(seg, SR, nperseg=2048, noverlap=1536)

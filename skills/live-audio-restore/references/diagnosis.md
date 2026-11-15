@@ -152,23 +152,42 @@ phase by band), the 3-10 kHz share by stem, and the tone deviation against the m
 |---|---|---|
 | De-limit | LRA < 4 or PLR < 11, and the De-limiter is installed | Depth 2.0 if LRA < 2 or PLR < 9.5, else 1.5 |
 | Drum transients | Stems available | 0.35 / max 2.5 dB with de-limiting; 0.55 / 4.5 dB if limited but no de-limiter; 0.25 / 2 dB otherwise |
-| Polarity repair | A stem has 10 % or more of its energy in 4 s windows with L-R correlation below -0.3 | Only that stem. Without stems, the mix when 10 % or more of mid-band windows are negative |
+| Polarity repair | A stem has 10 % or more of its energy in 4 s windows with L-R correlation below -0.3 (a whole layer reversed), **or** 5 % or more of its energy in coherent anti-phase bins together with a mono loss beyond -1 dB (anti-phase in some bands only) | Only that stem. Without stems, the mix when 10 % or more of mid-band windows are negative |
 | De-ess (vocal) | Vocal stem present | Max cut 9 dB if the vocal carries 50 % or more of the 3-10 kHz energy, or 5-8 kHz sits more than 4 dB above the profile; else 6 dB. Acts only on the brightest 20 % of moments |
 | Widen guitars/keys | Stereo source, stems, and the drum stem's median L-R correlation ≥ 0.8 (a mixed image) | Side +3 dB above 150 Hz. Never on mono or near-mono. Off on a diffuse, room-miked recording (drums below 0.8): it is already wide. An audience recording measured drums 0.65, vocal 0.32, side only 3.8 dB under mid; broadcast mixes measured 0.98-1.0 |
 | Per-stem tone match | Stems and a profile with stem statistics | 60 % toward the reference stem. Boosts at most +3 dB (+4 dB below 150 Hz), cuts at most -6 dB. Boost only where the stem carries at least 5-30 % of the band (no lifting of bleed). Bass and kick never cut below 120 Hz |
 | Stem balance | Same | Each stem halfway to its reference share of the mix, at most ±3 dB, per section |
-| Stem dynamics | Stems | Drum peaks held at drum loudness +11 dB (1 ms lookahead); bass 3:1, vocal 3:1, guitars 2.5:1; bus 1.8:1 |
+| Stem dynamics | Stems | Limited source: drum peaks held at drum loudness +11 dB (1 ms lookahead); bass 3:1, vocal 3:1, guitars 2.5:1; bus 1.8:1. Open source: drums at +15 dB; bass 2:1, vocal 2:1, guitars 1.5:1; no bus glue |
+| Loudness contour | Open source (LRA ≥ 4 and PLR ≥ 11) | After all processing, the original's 3 s loudness contour is put back, as a slow gain within ±6 dB |
 | Overall tone match | Always (with a profile) | 85 % toward the profile, -8 to +6 dB, no boosts above the cut-off, per section |
 | Band extension | Brick wall below 18.5 kHz | SBR-style shift of the band below the cut-off, level set so the band above the cut-off matches the profile's top octave |
 | Bass to mono | Stereo | Below 100 Hz |
-| Loudness | Always | Loudest target where the limiter exceeds 1 dB at most 8 % of the time and 2 dB at most 1.5 % |
+| Loudness | Always | Loudest target where the limiter exceeds 1 dB at most 8 % of the time and 2 dB at most 1.5 % (limited source), or 2.5 % and 0.5 % (open source) |
+
+**Limited or open: the decision behind four steps.** LRA < 4 LU or PLR < 11 dB means a limiter already flattened
+the recording (broadcasts, loud uploads). Undoing that is part of the restoration, and the master may be loud.
+
+Otherwise the recording is open (audience and board recordings, careful rips), and its dynamics are part of the
+performance. On one open audience recording (LRA 10 LU), the limited-source settings took the range down to 6.4 LU
+and raised the quiet intro by 4-5 dB against the choruses. Tone and stem changes alone, with no compression at all,
+still took 2 LU off. Hence light compression plus the contour step for open recordings.
+
+**Coherent anti-phase energy by stem.** The repair's own detector, measured on all test material:
+
+| Stem | Coherent anti-phase energy | Mono loss | Verdict |
+|---|---|---|---|
+| Drums and bass, every recording | 0-0.1 % | 0 to -1 dB | Leave alone |
+| Vocal stems (broadcast, audience) | 6.8-8.9 % | -1.2 to -2.0 dB | Repair: mono loss improved by 0.4-0.5 dB |
+| Guitar stem, audience recording | 6.0 % | -1.7 dB | Repair (the window rule saw 0 %) |
+| Whole reversed guitar layers | 55-76 % | -3.7 to -6.1 dB | Repair (the window rule saw 55-100 %) |
 
 **Reading the anti-phase picture.** In the "anti-phase by band" column, cosines near -1 in 150-2500 Hz with +1 above
 6 kHz mean a coherent layer reversed only in its body. A plain channel swap would be reversed everywhere. The repair
 rotates only coherent anti-phase bins, so this pattern is handled correctly.
 
-In one broadcast, the vocal stem showed 3.4 % anti-phase energy. That was bleed of the guitar layer, below the
-10 % threshold, and it was rightly left alone.
+In one broadcast, the vocal stem showed 3.4 % of its energy in anti-phase windows, below the window threshold. The
+detector found 8.7 % coherent anti-phase energy in it, mostly bleed of the reversed guitar layer, with a mono loss of
+-1.4 dB. It is now repaired too, which brings that loss to -0.9 dB.
 
 **Reading the tone table.** "+" means too much against the reference. A typical broadcast or audience pattern:
 
@@ -233,7 +252,7 @@ earlier, lighter treatment; the table gives both where they differ.
 | Cut-off 15.55 kHz, edge 51 dB | Codec wall → band extension |
 | Codec notch 6.4-7.8 kHz, 7.9 dB | Reported, smoothed by the tone match |
 | Mid-band negative in 46 % of windows; mono loss -1.6 dB | Anti-phase problem |
-| Stem "other": 55 % anti-phase energy, cos -0.99 at 150-1000 Hz, +0.96 above 6 kHz | Repair "other" only (vocal 3.4 % = bleed, left alone) |
+| Stem "other": 55 % anti-phase energy, cos -0.99 at 150-1000 Hz, +0.96 above 6 kHz | Repair "other". The vocal stem has 3.4 % in anti-phase windows but 8.7 % coherent anti-phase energy (bleed of the reversed layer) and -1.4 dB mono loss: repaired too |
 | Vocal carries 61 % of 3-10 kHz; 5-8 kHz +6.4 dB vs profile | Strong de-ess |
 | Stem shares: bass -12.4 dB vs reference -6.3 dB | Balance: bass +2.8 / +3 dB |
 | Stereo-image jump at 211 s | Two sections |
@@ -245,8 +264,8 @@ Results:
 |---|---|---|
 | Tone RMS deviation | 4.09 dB | 1.28 dB |
 | 3 s crest | 10.9 dB | 12.3 dB |
-| Worst mid-band correlation | -0.49 | -0.12 |
-| Mono loss | -1.61 dB | -0.76 dB |
+| Worst mid-band correlation | -0.49 | +0.09 |
+| Mono loss | -1.61 dB | -0.66 dB |
 | Loudness | -9.6 LUFS | -10.6 LUFS |
 
 ### B. Audience recording of an MC (3:23)
@@ -286,6 +305,37 @@ Results:
 | Gaps vs speech | +9.0 dB | -1.8 dB |
 | Talker's recognised-word mass (Whisper on the mix) | 41.8 (48 words, mean log-prob -0.17) | 42.5 (48 words, -0.16) |
 | Voice EQ boosts above the voice's 5.5 kHz band edge | — | none: the voice's share there, talk minus the quieter gaps, is nil |
+
+### D. Open audience recording of a song (5:33)
+
+| Measured | Verdict / action |
+|---|---|
+| -15.4 LUFS, LRA 10.0 LU, PLR 15.5 dB | Open: no de-limiting; light dynamics, contour step, gentle master |
+| Cut-off 13.1 kHz, edge 47 dB | Codec wall → band extension |
+| Tone: 200-800 Hz +2 to +6 dB, 2-10 kHz -4 to -10 dB; RMS 5.1 dB | Tone match |
+| Bass stem -17.4 dB against the mix (reference -6.3) | Balance: bass +3 dB |
+| Coherent anti-phase energy: vocal 8.9 %, guitars 6.0 %; their mono loss -2.0 / -1.7 dB (window test: 3.7 % / 0 %) | Polarity repair on both |
+| Drums' median L-R correlation 0.65; side 3.8 dB under mid | Room-miked image: no widening |
+
+Results with the defaults, no hand edits:
+
+| Measure | Before | After |
+|---|---|---|
+| Tone RMS deviation | 5.08 dB | 1.89 dB |
+| Loudness range | 10.0 LU | 9.2 LU |
+| 3 s crest | 14.8 dB | 15.0 dB |
+| Loudness | -15.4 LUFS | -13.5 LUFS |
+| Mono loss | -1.62 dB | -1.24 dB |
+| Bandwidth | 13.1 kHz | rebuilt to about 20 kHz |
+
+Before these rules existed, two assistants hand-tuned this song:
+
+| Version | Tone deviation | Loudness range | Loudness |
+|---|---|---|---|
+| Claude, limited-source dynamics | 1.80 dB | 6.4 LU | -13.0 LUFS |
+| ChatGPT, own edits | 2.26 dB | 9.0 LU | -16.0 LUFS, quieter than the source |
+
+The defaults now keep the better half of each.
 
 ## 7. When the numbers and the ears disagree
 

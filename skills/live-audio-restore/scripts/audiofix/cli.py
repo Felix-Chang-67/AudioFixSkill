@@ -77,6 +77,11 @@ def _verify(a, P, rep, log):
     with open(os.path.join(a.work, "verification.md"), "w") as fh:
         fh.write(report.verification_md(V, P, rep))
     log(f"[verify] wrote verification.md, AB.wav, compare.png in {a.work}")
+    warns = [c["check"] for c in V.get("checks", []) if not c["pass"]]
+    log("[next] " + (f"{len(warns)} WARN: {'; '.join(warns)}. Before delivering, find the cause and act (SKILL.md "
+                     f"step 6), then re-render" if warns else "all checks PASS"))
+    log(f"[next] deliver {os.path.join(a.work, 'restored.wav')}, restored.m4a and AB.wav (the listener starts with "
+        f"AB.wav); quote before/after numbers from verification.md and every plan edit you made, with its reason")
     return V
 
 

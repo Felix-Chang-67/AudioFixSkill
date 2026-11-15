@@ -66,11 +66,17 @@ def build(D):
             amt, mx = ((0.35, 2.5) if M["delimit"]["enabled"] else (0.55, 4.5) if limited else (0.25, 2.0))
             M["transients"] = {"enabled": True, "amount": amt, "max_db": mx,
                                "why": "drum hits flattened by the limiter" if limited else "light lift of drum hits"}
-            flagged = [k for k, v in st.items() if v["stereo"].get("anti_pct", 0) >= 10]
-            info = ", ".join(f"{k} {v['stereo'].get('anti_pct', 0)} %" for k, v in st.items())
+            def _anti(s):
+                return s.get("anti_pct", 0) >= 10 or (s.get("coherent_anti_pct", 0) >= 5
+                                                      and s.get("mono_loss_db", 0) < -1.0)
+            flagged = [k for k, v in st.items() if _anti(v["stereo"])]
+            info = ", ".join(f"{k} {v['stereo'].get('anti_pct', 0)} % / {v['stereo'].get('coherent_anti_pct', '-')} % / "
+                             f"{v['stereo'].get('mono_loss_db', '-')} dB" for k, v in st.items())
             M["antiphase"] = {"stems": flagged,
-                              "why": f"share of each stem's energy in 4 s windows with L-R correlation < -0.3: {info} "
-                                     f"(rule: repair a stem at >= 10 %)"}
+                              "why": f"per stem: energy in 4 s windows with L-R correlation < -0.3 / energy in coherent "
+                                     f"anti-phase bins / mono-sum loss: {info}. Rule: repair at >= 10 % of windows "
+                                     f"(a whole layer reversed), or >= 5 % coherent with mono loss beyond -1 dB (anti-phase "
+                                     f"in some bands only); only the anti-phase bins are rotated"}
             ts = mu.get("treble_share_pct", {}).get("vocals", 0)
             dev = _avg(mu["tonal"]["by_band"], (5040, 6350, 8000))
             strong = ts >= 50 or dev > 4
@@ -106,11 +112,26 @@ def build(D):
                             "why": f"stem levels re mix, live {live} vs reference {ref}: move halfway, +-3 dB max"}
         else:
             M["balance"] = {"enabled": False, "why": "needs stems and a profile with stem statistics"}
-        M["dynamics"] = {"enabled": bool(st), "drum_ceiling_over_lufs": 11.0,
-                         "bass": [3.0, 10, 160, 70], "vocals": [3.0, 4, 90, 60], "other": [2.5, 8, 120, 60],
-                         "bus": [1.8, 25, 250, 60],
-                         "why": "peaks are controlled per stem (drum hits shaved on the drum stem, bass/vocal/guitars "
-                                "compressed separately) so the master limiter does not pump the whole mix"}
+        if limited:
+            M["dynamics"] = {"enabled": bool(st), "drum_ceiling_over_lufs": 11.0,
+                             "bass": [3.0, 10, 160, 70], "vocals": [3.0, 4, 90, 60], "other": [2.5, 8, 120, 60],
+                             "bus": [1.8, 25, 250, 60],
+                             "why": f"{dyn}: limited source. Peaks are controlled per stem (drum hits the de-limiter "
+                                    f"brought back shaved at drum loudness +11 dB, bass/vocal/guitars compressed "
+                                    f"separately) so the master limiter does not pump the whole mix"}
+        else:
+            M["dynamics"] = {"enabled": bool(st), "drum_ceiling_over_lufs": 15.0,
+                             "bass": [2.0, 10, 160, 70], "vocals": [2.0, 4, 90, 60], "other": [1.5, 8, 120, 60],
+                             "bus": [1.0, 25, 250, 60],
+                             "why": f"{dyn}: open recording, its dynamics are part of the performance. Light per-stem "
+                                    f"control only: drum hits shaved at drum loudness +15 dB (at +11 dB an open "
+                                    f"recording lost >1 dB on 18 % of the time and 1.8 dB of crest), 2:1 / 1.5:1 "
+                                    f"compression, no bus glue"}
+        M["macro"] = {"enabled": not limited, "max_db": 6.0,
+                      "why": f"{dyn}: " + ("open recording: after processing, the original's 3 s loudness contour is put "
+                                           "back (slow gain, within +-6 dB), so quiet intros and breaks stay quiet; tone "
+                                           "and stem changes alone took 2 LU of range off an open recording"
+                                           if not limited else "limited source: its flattened contour is not kept")}
         M["match"] = {"enabled": True, "alpha": 0.85, "lo_db": -8.0, "hi_db": 6.0,
                       "why": f"long-term spectrum deviates {mu['tonal']['rms_db']} dB RMS from the profile "
                              f"(by band: {mu['tonal']['by_band']})"}
@@ -191,11 +212,16 @@ def build(D):
         P["speech"] = S
 
     # ---------------------------------------------------------------- master
-    P["master"] = {"ceiling_dbtp": -1.0, "over1_max_pct": 8.0, "over2_max_pct": 1.5, "search_lufs": [-8.0, -14.0],
+    ml = (D.get("music") or {}).get("loudness")
+    music_open = bool(ml) and not (ml["lra_lu"] < 4 or ml["plr_db"] < 11)
+    o1, o2 = (2.5, 0.5) if music_open else (8.0, 1.5)
+    P["master"] = {"ceiling_dbtp": -1.0, "over1_max_pct": o1, "over2_max_pct": o2, "search_lufs": [-8.0, -14.0],
                    "speech_only_lufs": -16.0, "speech_offset_db": 4.0,
-                   "why": "music: the loudest level at which the limiter works above 1 dB at most 8 % and above 2 dB "
-                          "at most 1.5 % of the time; speech-only: -16 LUFS; spoken parts of a concert sit 4 dB "
-                          "under the music"}
+                   "why": f"music: the loudest level at which the limiter works above 1 dB at most {o1} % and above 2 dB "
+                          f"at most {o2} % of the time ("
+                          + ("open recording: the limiter stays almost idle, the dynamics are kept"
+                             if music_open else "limited source: as loud as a modern master without audible limiting")
+                          + "); speech-only: -16 LUFS; spoken parts of a concert sit 4 dB under the music"}
     return P
 
 

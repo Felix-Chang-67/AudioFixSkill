@@ -18,8 +18,10 @@ python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.
 | Dull, lost its sparkle | Top cut too much, or no band extension | `music.match.lo_db=-4`; `music.band_ext.enabled=true`; `music.band_ext.below_ref_db=-2` |
 | Fizzy top, "digital" highs | The rebuilt top is too loud | `music.band_ext.below_ref_db=3`; or `music.band_ext.enabled=false` |
 | Squashed, no punch | Master too loud, or not enough de-limiting | `master.over1_max_pct=5 master.over2_max_pct=1`; `music.delimit.depth=2` |
-| Pumping, breathing | De-limiting too deep, or drum shaving too hard | `music.delimit.depth=1.5`; `music.dynamics.drum_ceiling_over_lufs=13` |
-| Too quiet compared with other music | Perceptual target too strict for their use | `master.over1_max_pct=12 master.over2_max_pct=2.5` |
+| Pumping, breathing | De-limiting too deep, or drum shaving too hard | `music.delimit.depth=1.5`; `music.dynamics.drum_ceiling_over_lufs=13` (limited sources; open ones already use 15) |
+| Too quiet compared with other music | Perceptual target too strict for their use | Limited source: `master.over1_max_pct=12 master.over2_max_pct=2.5`. Open source: `master.over1_max_pct=5 master.over2_max_pct=1` (costs some dynamics) |
+| Flat, the intro is as loud as the chorus (open recording) | The song's contour was flattened | `music.macro.enabled=true` (default for open recordings); lighter `music.dynamics` ratios |
+| Too uneven, I want it denser, like a studio master (open recording) | The contour step keeps the live dynamics | `music.macro.enabled=false`, then `master.over1_max_pct=5 master.over2_max_pct=1` |
 | Too wide, unnatural | Width step | `music.widen.side_db=1.5`; or `music.widen.enabled=false` |
 | Still phasey | An anti-phase stem not flagged | `music.antiphase.stems='["other","vocals"]'` |
 | Vocal too loud or too quiet | Stem balance | `music.balance.fraction=0.3`, or edit the stem gains by profile |

@@ -129,6 +129,22 @@ def stereo(y):
     return res
 
 
+def coherent_antiphase(stem, max_s=120.0, chunk_s=30.0):
+    """Share of a stem's energy that the polarity repair would rotate (coherent anti-phase STFT bins), estimated on
+    up to max_s seconds spread over the stem, plus the stem's mono-sum loss. Catches anti-phase confined to some bands
+    (a reversed low end, a phasey vocal), which the 4 s window correlation of stem_stereo misses."""
+    from .dsp import fix_antiphase
+    n, L = len(stem), int(chunk_s * SR)
+    k = max(1, int(max_s // chunk_s))
+    if n <= k * L:
+        sample = stem
+    else:
+        sample = np.concatenate([stem[s:s + L] for s in np.linspace(0, n - L, k).astype(int)])
+    _, a = fix_antiphase(sample, block_s=2 * chunk_s, overlap_s=2.0)
+    return {"coherent_anti_pct": round(float(a["treated_pct"]), 1),
+            "mono_loss_db": stereo(stem).get("mono_loss_db", 0.0)}
+
+
 def stem_stereo(stem, mix_energy=None, win_s=4.0):
     """Anti-phase check for one stem: energy-weighted share of windows with L-R correlation < -0.3,
     plus the phase picture per band over those windows."""

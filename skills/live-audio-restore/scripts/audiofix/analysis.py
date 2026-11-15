@@ -114,7 +114,8 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
         if st is not None:
             sm = {k: cat(v, mus) for k, v in st.items()}
             mixm = sum(sm.values()) + cat(x - sum(st.values()), mus)
-            M["stems"] = {k: {"level_re_mix_db": measure.level_re_mix(v, mixm), "stereo": measure.stem_stereo(v)}
+            M["stems"] = {k: {"level_re_mix_db": measure.level_re_mix(v, mixm),
+                              "stereo": {**measure.stem_stereo(v), **measure.coherent_antiphase(v)}}
                           for k, v in sm.items()}
             M["treble_share_pct"] = measure.treble_share(sm)
             per_sec = []
