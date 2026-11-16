@@ -279,17 +279,32 @@ and guitar stems had left the whole mix thinner (80 Hz still 2-3 dB under) and d
 **Why.** Lossy codecs remove everything above about 15-17 kHz. The music sounds closed, especially on good
 headphones.
 
-**How (SBR-like, `dsp.hf_extend`).**
+**How (SBR-like fill, `dsp.hf_fill`).**
 
-1. Take the band just below the cut-off, [fc - Δ, fc] with Δ = min(fc/4, 19.5 kHz - fc).
-2. Shift it up by Δ with a single-sideband (Hilbert) shift. A shift, not a pitch change, so cymbals and sibilants
+1. Start 500 Hz under the lowest cut-off the codec used: the 10th percentile of 15 s windows. A codec's cut-off
+   moves over time, and the whole-file value is set by its widest passage.
+2. Take the band just below the start, [fc - Δ, fc] with Δ = min(fc/4, 19.5 kHz - fc).
+3. Shift it up by Δ with a single-sideband (Hilbert) shift. A shift, not a pitch change, so cymbals and sibilants
    stay aligned with their hits.
-3. Repeat until about 19.5 kHz.
-4. High-pass at the cut-off and roll off from 17.5 kHz.
+4. Repeat until about 19.5 kHz.
 5. Replace half of its power (`noise_mix` 0.5) with a noise-like copy that has the same envelope: STFT magnitude
    smoothed over about 400 Hz, random phase shared by both channels, so panning and timing stay.
-6. Scale it so that [fc + 300, fc + 2500] matches the reference profile's power in that band (`below_ref_db`
-   offsets it). Without profile data, it continues the slope of the octave below at -6 dB.
+6. **Fill only what is missing.** Per 20 s section (crossfaded) and per 250 Hz band, measure the existing content
+   and the copy. Scale the copy so that both together reach the reference's level at that frequency, relative to the
+   section's own 0.5-2 kHz level. `below_ref_db` lowers the target. Bands that already hold enough get nothing.
+7. Without profile data for the top, the older single-gain extension (`dsp.hf_extend`) runs: one band above the
+   cut-off is matched, and the slope of the octave below continues at -6 dB.
+
+**Why fill, not one gain.** The single gain matched one band above the cut-off, so two things went wrong:
+
+- **Too bright above it.** The copies higher up followed the band they were shifted from, not the studio version's
+  roll-off. On one song, 16-19 kHz came out 5-10 dB over the studio version. A listener heard the version left like
+  this as a faint digital edge on the vocal that also sounded scattered. The version with that region 4 dB quieter
+  did not have it.
+- **A notch below it.** On another song, applause after it had raised the whole-file cut-off to 15.4 kHz, while the
+  song itself ended at 13.1-14.4 kHz. The extension started at 14.6 kHz and left a 10-13 dB notch at 13.6-14.6 kHz.
+
+The fill follows the reference within 1 dB from 13 to 19 kHz on that song.
 
 **Why the noise-like half.** A shifted band keeps the sparse, peaky texture of what it was shifted from. Real air,
 from cymbals and breath, is dense. On the audience recording, the 13-19 kHz flatness was:

@@ -16,6 +16,13 @@ def _avg(d, keys):
     return float(np.mean(v)) if v else 0.0
 
 
+def is_limited(L):
+    """A limiter or heavy compression on the source: loudness range under 4 LU, or a peak-to-loudness ratio under 11 dB
+    together with a 3 s crest under 12.5 dB. PLR alone took a dense but unlimited live song (PLR 10.9, crest 13.6,
+    LRA 6.7; the de-limiter found 0.1 dB of limiting) for a limited one and flattened it to 3.1 LU."""
+    return L["lra_lu"] < 4 or (L["plr_db"] < 11 and L.get("crest3s_db", 0.0) < 12.5)
+
+
 def build(D):
     cap = D["capabilities"]
     has_stems = D.get("stems_dir") is not None
@@ -57,12 +64,12 @@ def build(D):
     if mu:
         L, st = mu["loudness"], mu.get("stems")
         M = {}
-        limited = L["lra_lu"] < 4 or L["plr_db"] < 11
+        limited = is_limited(L)
         heavy = L["lra_lu"] < 2 or L["plr_db"] < 9.5
         dyn = f"LRA {L['lra_lu']} LU, peak-to-loudness {L['plr_db']} dB"
         if limited and cap["delimiter"]:
             M["delimit"] = {"enabled": True, "depth": 2.0 if heavy else 1.5,
-                            "why": f"{dyn}: {'heavily ' if heavy else ''}limited (rule: LRA < 4 or PLR < 11; "
+                            "why": f"{dyn}: {'heavily ' if heavy else ''}limited (rule: LRA < 4, or PLR < 11 with a 3 s crest < 12.5; "
                                    f"depth 2 if LRA < 2 or PLR < 9.5)"}
         else:
             M["delimit"] = {"enabled": False,
@@ -171,14 +178,19 @@ def build(D):
         bw = D["bandwidth"]
         damaged = bool(D.get("codec_repair", {}).get("codec_damage"))
         ext = (bw["brick_wall"] and bw["cutoff_hz"] < 18500) or damaged
-        # a codec low-pass with a transition band (no brick wall) is already down at the measured cut-off: start lower
-        ext_cut = bw["cutoff_hz"] if bw["brick_wall"] else max(8000, bw["cutoff_hz"] - 800)
-        M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": ext_cut, "below_ref_db": 0.0, "noise_mix": 0.5,
+        # start under the lowest cut-off the codec used (it moves over time) and fill only what is missing: a start
+        # above the song's own edge left a 10-13 dB notch where applause had raised the whole-file cut-off
+        low = min(bw["cutoff_hz"], bw.get("cutoff_p10_hz") or bw["cutoff_hz"])
+        ext_cut = int(max(8000, low - 500))
+        M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": ext_cut, "method": "fill", "below_ref_db": 0.0,
+                         "noise_mix": 0.5,
                          "why": f"content stops at {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB edge"
                                 + (" and a codec's sparse texture below it" if damaged else "")
-                                + (" (codec low-pass): rebuild the top from the band below; half of it as a "
-                                   "noise-like copy with the same envelope, because a shifted codec band is sparse "
-                                   "and sounds metallic while real air is dense" if ext else
+                                + (f" (codec low-pass; 10 % of the passages end below {low} Hz): rebuild the "
+                                   f"top from {ext_cut} Hz, a copy of the band below, half of it noise-like (a shifted "
+                                   f"codec band is sparse and sounds metallic, real air is dense). Per 20 s and per "
+                                   f"250 Hz, only what is missing up to the reference's own level is added, so the "
+                                   f"top follows the studio roll-off" if ext else
                                    ": no codec wall, nothing to rebuild")}
         M["mono_bass_hz"] = 100 if kind == "stereo" else None
         P["music"] = M
@@ -252,7 +264,7 @@ def build(D):
 
     # ---------------------------------------------------------------- master
     ml = (D.get("music") or {}).get("loudness")
-    music_open = bool(ml) and not (ml["lra_lu"] < 4 or ml["plr_db"] < 11)
+    music_open = bool(ml) and not is_limited(ml)
     o1, o2 = (2.5, 0.5) if music_open else (8.0, 1.5)
     min_crest = round(ml["crest3s_db"] - 0.5, 2) if music_open else None
     # a quiet, peaky open recording may only keep its crest below -14 LUFS: search down to the original's loudness

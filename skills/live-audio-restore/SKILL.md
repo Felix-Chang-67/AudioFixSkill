@@ -188,7 +188,8 @@ Read it the first time you use the skill, and whenever a verdict surprises you.
 they matter most:
 
 1. **Limited or open** (`music.delimit`, `music.dynamics`, `music.macro`, `master`):
-   - A limited source (LRA < 4 LU or PLR < 11 dB) is de-limited, gets per-stem peak control and a loud master.
+   - A limited source (LRA < 4 LU, or PLR < 11 dB with a 3 s crest under 12.5 dB) is de-limited, gets per-stem
+     peak control and a loud master.
    - An open one keeps its dynamics: light compression, the original's loudness contour put back, and a limiter
      that stays almost idle.
 2. **Anti-phase** (`music.antiphase.stems`): a whole reversed layer, or anti-phase confined to some bands. Only
@@ -297,7 +298,8 @@ Map what the user says to a knob, change one thing at a time, re-render and send
 7. Shave drum peaks on the drum stem; compress bass, vocal and guitars separately; bus glue. Firm on limited
    sources, light on open ones.
 8. Overall tone match, 85 %, per section.
-9. Band extension above the codec cut-off, half of it noise-like so the rebuilt air is dense, not metallic.
+9. Band extension above the codec cut-off, half of it noise-like so the rebuilt air is dense, not metallic. It adds
+   only what is missing, per 20 s and 250 Hz, up to the reference's own level, so the top follows the studio roll-off.
 10. Bass below 100 Hz to mono.
 11. Open recordings: the original's loudness contour put back, so quiet parts stay quiet.
 12. Perceptual loudness and a true-peak limiter at -1 dBTP: as loud as a modern master for limited sources; for

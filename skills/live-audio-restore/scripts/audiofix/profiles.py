@@ -37,6 +37,18 @@ def hf_target(profile, lo, hi):
     return float(10 * np.log10(np.mean(vals))) if vals else None
 
 
+def hf_curve(profile):
+    """f -> the reference's power density at f re its 0.5-2 kHz density (dB), from its 1 kHz band levels (8-20 kHz);
+    None when the profile has no top-band statistics."""
+    rel = profile.get("hf_rel_db") or {}
+    if not rel:
+        return None
+    xs = np.array(sorted(int(b) for b in rel), float)
+    vs = np.array([rel[str(int(b))] for b in xs], float)
+    xs = xs + 500.0
+    return lambda f: float(np.interp(f, xs, vs))
+
+
 def load(name_or_path):
     p = name_or_path
     if not os.path.exists(p):

@@ -356,18 +356,16 @@ def noise_like(sig, nper=1024, smooth_bins=9, seed=1234):
     return out
 
 
-def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None, noise_mix=0.0):
-    """SBR-style extension above a codec cut-off: the band just below the cut-off is shifted up
-    (single-sideband, so hats, cymbals and sibilants keep their timing), repeated until ~top, then set so that
-    the band right above the cut-off sits at target_rel_db (power re 0.5-2 kHz). mask: samples to calibrate on.
-    noise_mix: share of the extension's power replaced by a noise-like copy with the same envelope (0..1)."""
+def _ssb_copy(y, start, top=19500.0):
+    """The band just below `start` shifted up (single-sideband, so hats, cymbals and sibilants keep their timing),
+    repeated until about `top`. Returns (copy, passes)."""
     from scipy.fft import next_fast_len
     from scipy.signal import hilbert
     n = len(y)
     nf = next_fast_len(n)
     t = np.arange(n) / SR
     ext = np.zeros_like(y)
-    fc = float(cutoff)
+    fc = float(start)
     passes = 0
     while fc < top - 400 and passes < 4:
         delta = min(fc * 0.25, top - fc)
@@ -380,6 +378,81 @@ def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None,
         ext += sh
         fc += delta
         passes += 1
+    return ext, passes
+
+
+def _psd2(y, nper=4096):
+    f, pl = welch(y[:, 0], SR, nperseg=min(nper, len(y)))
+    _, pr = welch(y[:, 1], SR, nperseg=min(nper, len(y)))
+    return f, (pl + pr) / 2
+
+
+def hf_fill(y, start, rel_db_at, top=19500.0, below_db=0.0, noise_mix=0.5, section_s=20.0, band_hz=250.0,
+            max_gain_db=24.0, taps=4095):
+    """Rebuild the top above `start` toward the reference's spectrum, adding only what is missing.
+
+    The material is the SSB copy (half of it noise-like, as real air is dense). Then, per section (crossfaded, so a
+    codec whose cut-off moves over time is followed) and per band_hz band, the copy is scaled so that the existing
+    content plus the copy reaches the target: rel_db_at(f) is the reference's level at f re its 0.5-2 kHz level, applied
+    to the section's own 0.5-2 kHz level, minus below_db. Bands that already hold enough get nothing.
+
+    The single-gain extension it replaces calibrated one band above the cut-off: the copies above it followed the
+    source band, not the reference's roll-off (16-19 kHz came out 5-10 dB over the studio version, heard as a digital,
+    scattered vocal), and a start above a moving cut-off left a 10-13 dB notch."""
+    n = len(y)
+    ext, passes = _ssb_copy(y, start, top)
+    if passes == 0:
+        return y, {"applied": False}
+    if noise_mix > 0:
+        nz = highpass(noise_like(ext), start - 100, order=8)
+        p_e, p_n = float(np.mean(ext.astype(np.float64) ** 2)), float(np.mean(nz.astype(np.float64) ** 2)) + 1e-30
+        ext = (np.sqrt(1 - noise_mix) * ext + np.sqrt(noise_mix * p_e / p_n) * nz).astype(np.float32)
+    dur = n / SR
+    k = max(1, int(round(dur / section_s)))
+    edges = np.linspace(0.0, dur, k + 1)
+    secs = [[float(edges[i]), float(edges[i + 1])] for i in range(k)]
+    W = ramp_weights(n, secs, fade=2.0)
+    lows = np.arange(float(start), top, band_hz)
+    centres = lows + band_hz / 2
+    tgt = np.array([rel_db_at(c) for c in centres]) - below_db
+    cap = 10 ** (max_gain_db / 20)
+    firs, used = [], []
+    for a, b in secs:
+        i0, i1 = int(a * SR), int(b * SR)
+        f, py = _psd2(y[i0:i1])
+        _, pe = _psd2(ext[i0:i1])
+        ref = py[(f >= 500) & (f <= 2000)].mean()
+        g = np.zeros(len(centres))
+        if ref > 1e-14:
+            for j, lo in enumerate(lows):
+                s = (f >= lo) & (f < lo + band_hz)
+                need = ref * 10 ** (tgt[j] / 10) - py[s].mean()
+                e = pe[s].mean()
+                if need > 0 and e > 1e-30:
+                    g[j] = min(float(np.sqrt(need / e)), cap)
+        g = np.convolve(g, np.ones(3) / 3, mode="same")                  # no band switches on or off alone
+        used.append(g)
+        freq = np.concatenate([[0.0, start - band_hz], centres, [top + band_hz, SR / 2]])
+        gain = np.concatenate([[0.0, 0.0], g, [0.0, 0.0]])
+        firs.append(firwin2(taps, freq, gain, fs=SR).astype(np.float32))
+    out = (y + apply_sectioned(ext, firs, W)).astype(np.float32)
+    f, po = _psd2(out, 8192)
+    ref = po[(f >= 500) & (f <= 2000)].mean()
+    dev = {}
+    for c0 in range(int(np.ceil(start / 1000.0) * 1000), int(top) - 500, 1000):
+        s = (f >= c0) & (f < c0 + 1000)
+        dev[str(c0)] = round(float(10 * np.log10(po[s].mean() / ref + 1e-30) - (rel_db_at(c0 + 500) - below_db)), 1)
+    return out, {"applied": True, "start_hz": round(float(start)), "passes": passes, "sections": k,
+                 "bands_filled_pct": round(float(np.mean(np.array(used) > 1e-3) * 100), 1),
+                 "result_minus_target_db": dev}
+
+
+def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None, noise_mix=0.0):
+    """SBR-style extension above a codec cut-off: the band just below the cut-off is shifted up
+    (single-sideband, so hats, cymbals and sibilants keep their timing), repeated until ~top, then set so that
+    the band right above the cut-off sits at target_rel_db (power re 0.5-2 kHz). mask: samples to calibrate on.
+    noise_mix: share of the extension's power replaced by a noise-like copy with the same envelope (0..1)."""
+    ext, passes = _ssb_copy(y, cutoff, top)
     if passes == 0:
         return y, {"gain_db": None}
     if rolloff and rolloff > cutoff:

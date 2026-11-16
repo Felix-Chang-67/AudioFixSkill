@@ -107,8 +107,9 @@ def material(D):
     if cr.get("applied"):
         items.append({"kind": "highs", "text": (
             f"Low-bitrate codec damage (cut-off {D['bandwidth']['cutoff_hz']} Hz, sparse highs) was repaired with "
-            f"Apollo, and the band above the cut-off is rebuilt: the top octave is synthesized. Say so; if the "
-            f"listener hears it as fake or harsh, music.band_ext.below_ref_db=6 makes it 6 dB quieter")})
+            f"Apollo, and the band above the cut-off is rebuilt toward the reference's level: the top octave is "
+            f"synthesized. Say so; if the listener hears it as fake or harsh, or the vocal as digital or scattered, "
+            f"music.band_ext.below_ref_db=3 puts it 3 dB under the reference")})
     return items
 
 

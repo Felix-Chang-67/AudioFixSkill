@@ -22,7 +22,7 @@ People describe problems in words. These are the measurements that usually sit b
 
 | What people say | Look at | Typical cause in live material | Step that fixes it |
 |---|---|---|---|
-| Flat, squashed, no punch, tiring | LRA < 4 LU, PLR < 11 dB, 3 s crest < 12 dB | Broadcast or streaming limiter | De-limit; drum transients |
+| Flat, squashed, no punch, tiring | LRA < 4 LU, or PLR < 11 dB with a 3 s crest < 12.5 dB | Broadcast or streaming limiter | De-limit; drum transients |
 | Phasey, hollow, "outside my head", vanishes on a phone speaker | Negative mid-band L-R correlation, mono loss > 1.5 dB, a stem with anti-phase energy | One side of a stereo pair wired in reverse; a widener; a matrix (Lt/Rt) downmix | Polarity repair (per stem) |
 | Muddy, boxy | 200-500 Hz above the reference | Room, PA, close mics | Tone match (per stem, then overall) |
 | Harsh, shrill, fizzy | 3-10 kHz above the reference; vocal carries most of that energy | Broadcast presence boost, cymbal bleed, crowd | De-ess; tone match |
@@ -46,11 +46,16 @@ All levels are taken on the decoded 44.1 kHz stereo signal.
 | Integrated loudness (LUFS) | ITU-R BS.1770, gated | Masters: about -7 to -10. Broadcast music: about -9 to -12. Raw audience recordings: often -25 to -45. Podcast/speech target: -16 |
 | Loudness range (LRA, LU) | EBU Tech 3342: spread of the 3 s loudness | **< 4 LU = limited, < 2 LU = heavily limited.** Natural live music: 4-10 LU. A broadcast rip measured 0.65 LU. MC files run 15-30 LU (the crowd jumps in level) |
 | True peak (dBTP) | 4x oversampled peak | Above -1 dBTP risks clipping after lossy encoding |
-| PLR (dB) | True peak minus integrated loudness | **< 11 dB = limited, < 9.5 dB = heavily limited.** Loud modern masters: about 8-9. Open live mixes: 12-16 |
+| PLR (dB) | True peak minus integrated loudness | **< 11 dB with a 3 s crest < 12.5 dB = limited; < 9.5 dB = heavily limited.** Loud modern masters: about 8-9. Open live mixes: 12-16; dense open songs can sit at 10-11 |
 | 3 s crest (dB) | Median over 3 s windows of peak / RMS | How much hits stand out locally. Below about 11 dB, punch is gone |
 
-**Rule (music):** limited if LRA < 4 or PLR < 11. If the De-limiter is installed, de-limit at depth 2.0 when LRA < 2 or
-PLR < 9.5, otherwise at depth 1.5. Without the De-limiter, drum transients get stronger shaping instead.
+**Rule (music):** limited if LRA < 4, or PLR < 11 together with a 3 s crest < 12.5 dB. If the De-limiter is installed,
+de-limit at depth 2.0 when LRA < 2 or PLR < 9.5, otherwise at depth 1.5. Without the De-limiter, drum transients get
+stronger shaping instead.
+
+Why the crest condition: a dense but unlimited live song had a PLR of 10.9 dB, a 3 s crest of 13.6 dB and an LRA of
+6.7 LU, and the De-limiter found 0.1 dB of limiting in it. PLR alone called it limited, and the limited settings took
+its range to 3.1 LU. The limited sources seen so far had crests of 10.3-10.9 dB and LRAs of 0.2-0.7 LU.
 
 ### Clipping
 
@@ -156,7 +161,7 @@ phase by band), the 3-10 kHz share by stem, and the tone deviation against the m
 | Step | Switched on when | Strength / parameters |
 |---|---|---|
 | Codec repair (Apollo, during analyze) | Cut-off below 16 kHz and the band under it sparse (8-12.5 kHz spectral flatness < 0.15), Apollo installed (`--codec-repair auto`) | Refills the sparse, peaky band under the cut-off (8-12.5 kHz flatness 0.08 → 0.26 on an audience rip; studio 0.42) before anything else. About 6x real time on CPU |
-| De-limit | LRA < 4 or PLR < 11, and the De-limiter is installed | Depth 2.0 if LRA < 2 or PLR < 9.5, else 1.5 |
+| De-limit | Limited (LRA < 4, or PLR < 11 with a 3 s crest < 12.5), and the De-limiter is installed | Depth 2.0 if LRA < 2 or PLR < 9.5, else 1.5 |
 | Drum transients | Stems available | 0.35 / max 2.5 dB with de-limiting; 0.55 / 4.5 dB if limited but no de-limiter; 0.25 / 2 dB otherwise |
 | Polarity repair | A stem has 10 % or more of its energy in 4 s windows with L-R correlation below -0.3 (a whole layer reversed), **or** 5 % or more of its energy in coherent anti-phase bins together with a mono loss beyond -1 dB (anti-phase in some bands only) | Only that stem. Without stems, the mix when 10 % or more of mid-band windows are negative |
 | De-ess (vocal) | Vocal stem present | Max cut 9 dB if the vocal carries 50 % or more of the 3-10 kHz energy, or 5-8 kHz sits more than 4 dB above the profile; else 6 dB. Acts only on the brightest 20 % of moments |
@@ -167,11 +172,11 @@ phase by band), the 3-10 kHz share by stem, and the tone deviation against the m
 | Stem dynamics | Stems | Limited source: drum peaks held at drum loudness +11 dB (1 ms lookahead); bass 3:1, vocal 3:1, guitars 2.5:1; bus 1.8:1. Open source: drums at +15 dB; bass 2:1, vocal 2:1, guitars 1.5:1; no bus glue |
 | Loudness contour | Open source (LRA ≥ 4 and PLR ≥ 11) | After all processing, the original's 3 s loudness contour is put back, as a slow gain within ±6 dB |
 | Overall tone match | Always (with a profile) | 85 % toward the profile, -8 to +6 dB, no boosts above the cut-off, per section |
-| Band extension | Brick wall below 18.5 kHz, or codec damage as above (without a brick wall it starts 800 Hz under the measured cut-off, below the encoder's transition band) | SBR-style shift of the band below the cut-off, half of it replaced by a noise-like copy with the same envelope (`noise_mix` 0.5); level set so the band above the cut-off matches the profile's top octave |
+| Band extension | Brick wall below 18.5 kHz, or codec damage as above | Starts 500 Hz under the lowest cut-off the codec used (the 10th percentile of 15 s windows; it moves over time). An SBR-style shifted copy of the band below, half of it noise-like (`noise_mix` 0.5). Per 20 s section and 250 Hz band, only what is missing up to the reference's own level is added, so the top follows the studio version's roll-off and never adds to content that is already there |
 | Bass to mono | Stereo | Below 100 Hz |
 | Loudness | Always | Loudest target where the limiter exceeds 1 dB at most 8 % of the time and 2 dB at most 1.5 % (limited source), or 2.5 % and 0.5 % (open source). Open sources also keep their 3 s crest within 0.5 dB of the original: the target steps down 0.5 dB until it does, from -8 LUFS down to the original's loudness minus 0.5 dB (at least -14, at most -20). The crest asked for is never more than the music brings to the master |
 
-**Limited or open: the decision behind four steps.** LRA < 4 LU or PLR < 11 dB means a limiter already flattened
+**Limited or open: the decision behind four steps.** LRA < 4 LU, or PLR < 11 dB with a 3 s crest under 12.5 dB, means a limiter already flattened
 the recording (broadcasts, loud uploads). Undoing that is part of the restoration, and the master may be loud.
 
 Otherwise the recording is open (audience and board recordings, careful rips), and its dynamics are part of the

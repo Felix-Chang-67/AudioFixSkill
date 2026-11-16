@@ -279,7 +279,14 @@ def run(x, st, plan, music_mask, work, log=print):
         snap("overall EQ", y)
     # 8. band extension
     be = M.get("band_ext", {})
-    if be.get("enabled"):
+    curve = profiles.hf_curve(prof) if be.get("enabled") and be.get("method", "fill") == "fill" else None
+    if curve is not None:
+        y, a = dsp.hf_fill(y, be["cutoff_hz"], curve, below_db=be.get("below_ref_db", 0.0),
+                           noise_mix=be.get("noise_mix", 0.5))
+        info["band_ext"] = a
+        log(f"[music] top rebuilt above {be['cutoff_hz']} Hz toward the reference, only what is missing: {a}")
+        snap("band extension", y)
+    elif be.get("enabled"):
         lo, hi = be["cutoff_hz"] + 300, min(be["cutoff_hz"] + 2500, 18000)
         tgt = profiles.hf_target(prof, lo, hi)
         if tgt is None:                                   # no profile data: continue the slope of the top octave

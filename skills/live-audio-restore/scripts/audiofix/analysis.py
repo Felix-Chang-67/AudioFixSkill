@@ -64,6 +64,12 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
     D["dc_dbfs"] = measure.dc_offset(x)
     D["hum"] = measure.hum(x)
     D["bandwidth"] = measure.bandwidth(x)
+    # a codec's cut-off moves over time (VBR); the top must be rebuilt from the lowest edge, not the whole-file one
+    cs = [measure.bandwidth(x[i:i + 15 * SR])["cutoff_hz"] for i in range(0, max(1, len(x) - 10 * SR), 15 * SR)
+          if float(np.sqrt(np.mean(x[i:i + 15 * SR].astype(np.float64) ** 2))) > 1e-4]
+    if cs:
+        D["bandwidth"]["cutoff_p10_hz"] = int(np.percentile(cs, 10))
+        D["bandwidth"]["cutoff_range_hz"] = [int(min(cs)), int(max(cs))]
     D["codec_notches"] = measure.codec_notches(x)
     D["noise"] = measure.noise_floor(x)
     D["stereo"] = measure.stereo(x)

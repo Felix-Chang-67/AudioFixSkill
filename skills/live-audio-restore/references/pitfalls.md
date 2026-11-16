@@ -208,3 +208,14 @@ The same audience recording was restored twice with this skill: once by Claude, 
       above -14 LUFS, where the search stopped. Every assistant would have hit the WARN, and the documented action
       (stricter limiter criteria) could not clear it.
     - Now: open sources search down to the original's loudness minus 0.5 dB, never below -20 LUFS.
+43. **A rebuilt top louder than the studio version is heard on the vocal.**
+    - What happened: two renders identical below 12.5 kHz differed only in the rebuilt top, which was 2-3 dB louder in
+      one of them. That one sounded "a little digital, the vocal scattered"; the other did not.
+    - The single-gain extension let the copies above the calibrated band follow the band they came from: 5-10 dB over
+      the studio roll-off at 16-19 kHz. On another song, it started above a moving cut-off and left a notch.
+    - Now: the top is filled per 20 s and 250 Hz only up to the reference's own level, from under the lowest cut-off.
+44. **PLR alone called a dense live song "limited".**
+    - What happened: a PLR of 10.9 dB, just under 11, switched on de-limiting, firm compression and a loud master on a
+      song with a 13.6 dB crest and a 6.7 LU range, where the De-limiter found 0.1 dB of limiting. Its range went to
+      3.1 LU.
+    - Now: a low PLR counts only with a 3 s crest under 12.5 dB.
