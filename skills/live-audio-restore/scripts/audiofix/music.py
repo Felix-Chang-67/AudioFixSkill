@@ -31,7 +31,7 @@ def _sel(arr, a, b, mask):
     return seg[m] if m.sum() > 5 * SR else seg
 
 
-def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low, presence_db=None):
+def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low, presence_db=None, fill_from=None):
     f, P = dsp.psd(stem_sec)
     _, Mx = dsp.psd(mix_sec)
     Bs, Bm = dsp.bands(f, P), dsp.bands(f, Mx)
@@ -50,6 +50,8 @@ def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low, presence_db=Non
     g[CENT < 40] = np.minimum(g[CENT < 40], 0)
     if keep_low:
         g[CENT < 120] = np.maximum(g[CENT < 120], 0)
+    if fill_from:                                     # the top-band fill sets the level above its start: cut only
+        g[CENT > fill_from - 500] = np.minimum(g[CENT > fill_from - 500], 0)
     return g
 
 
@@ -117,6 +119,11 @@ def run(x, st, plan, music_mask, work, log=print):
     else:
         meas, tsecs, TW = music_mask, secs, W
     cutoff = plan["music"]["band_ext"]["cutoff_hz"] if M.get("band_ext") else None
+    # with the top-band fill, everything above its start is set by the fill: no EQ step boosts there first (a stem EQ
+    # that lifted Apollo's top left 16-18 kHz 1.5-3 dB over the reference, which the fill cannot take back)
+    be0 = M.get("band_ext") or {}
+    fill_from = (be0["cutoff_hz"] if be0.get("enabled") and be0.get("method", "fill") == "fill"
+                 and profiles.hf_curve(prof) is not None else None)
     info = {"ledger": [], "balance": [], "overall_eq": []}
     mm = music_mask[:n]
     pl = np.asarray(prof["ltas"])
@@ -205,7 +212,7 @@ def run(x, st, plan, music_mask, work, log=print):
                 pres = M["stem_match"].get("vocal_presence_db") if s == "vocals" else None
                 curves = [_stem_curve(_sel(st[s], a, b, meas), _sel(mix, a, b, meas),
                                       np.asarray(prof["stems"][s]["shape"]), core, M["stem_match"],
-                                      s in ("bass", "drums"), pres) for a, b in tsecs]
+                                      s in ("bass", "drums"), pres, fill_from) for a, b in tsecs]
                 st[s] = dsp.apply_sectioned(st[s], [dsp.fir_from_curve(c) for c in curves], TW)
                 for (a, b), c in zip(tsecs, curves):
                     log(f"[music] stem EQ {s:6s} {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
@@ -270,6 +277,9 @@ def run(x, st, plan, music_mask, work, log=print):
         p = M["match"]
         curves = [dsp.match_curve(dsp.ltas(_sel(y, a, b, meas)), np.asarray(prof["ltas"]), p["alpha"],
                                   p["lo_db"], p["hi_db"], cutoff=cutoff) for a, b in tsecs]
+        if fill_from:
+            for c in curves:
+                c[CENT > fill_from - 500] = np.minimum(c[CENT > fill_from - 500], 0)
         y = dsp.apply_sectioned(y, [dsp.fir_from_curve(c) for c in curves], TW)
         for (a, b), c in zip(tsecs, curves):
             log(f"[music] overall EQ {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
