@@ -26,9 +26,9 @@ def music_target(ym, lu0, M, log):
         # the master can only keep the crest the music arrives with: ask for that, not more, or the search would run
         # down to its floor for nothing
         c0 = loudness.crest_3s(ym)
-        if c0 - 0.2 < mc:
+        if c0 < mc:
             log(f"[master] the music arrives with a 3 s crest of {c0:.2f} dB, under the {mc:.2f} dB asked: the "
-                f"limiter keeps it within 0.2 dB")
+                f"limiter keeps it within 0.2 dB (the rest went in the music steps: see steps.json)")
             mc = c0 - 0.2
     t = lo
     while t >= hi - 1e-9:

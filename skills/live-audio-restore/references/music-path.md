@@ -373,8 +373,9 @@ candidate level that meets the limiter criteria, the limited music's crest is co
 - Open sources may go down to the original's own loudness minus 0.5 dB (verify's "not quieter" limit), at least
   -14 and at most -20 LUFS. One audience recording sat at -25 LUFS with peaks 22 dB over its loudness. At -14 LUFS
   the limiter still worked above 2 dB for 0.6 % of the time and took 1.1 dB of crest.
-- The crest guard asks only for what the music brings to the master (its crest before the limiter, -0.2 dB).
-  Otherwise compression earlier in the chain would send the search to its floor for nothing.
+- When the music reaches the master with less crest than asked (earlier steps took it), the guard asks only for
+  that crest minus 0.2 dB. Otherwise the search would run to its floor for nothing. The ledger in `steps.json`
+  shows which step took it.
 
 - Why this measure: "busy time" counts even 0.01 dB of release tail, and "maximum reduction" is set by one freak
   peak. Time spent above 1 and 2 dB is what you can hear.

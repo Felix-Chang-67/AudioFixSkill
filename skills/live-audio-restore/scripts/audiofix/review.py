@@ -50,9 +50,20 @@ def _stretches(rows):
     return out
 
 
+def _music_rows(D):
+    """Timeline windows that lie mostly in music: talk has no drums and applause between sentences by nature."""
+    segs = D.get("processing_segments") or []
+    rows = []
+    for r in D.get("timeline") or []:
+        ov = sum(max(0.0, min(b, r["t1"]) - max(a, r["t0"])) for a, b, c in segs if c == "music")
+        if ov >= 0.5 * (r["t1"] - r["t0"]):
+            rows.append(r)
+    return rows
+
+
 def material(D):
     items = []
-    tl = D.get("timeline") or []
+    tl = _music_rows(D) if D.get("music") else []
     has_stems = bool(tl) and "vocals" in tl[0]
     clap = [r for r in tl if has_stems and r["vocals"] <= -15 and r["drums"] >= -6 and r["peak_over_rms_db"] >= 20]
     for a, b in _stretches(clap):
@@ -75,7 +86,7 @@ def material(D):
                 f"Separation found no bass (median {ba:.0f} dB re mix): the low end can only come from EQ on the whole "
                 f"mix, which lifts room and stage noise along with it. If the listener finds it thin or boomy, that is "
                 f"why")})
-    lu = D.get("loudness") or {}
+    lu = (D.get("music") or {}).get("loudness") or {}
     if lu.get("plr_db", 0) > 18:
         pk = D.get("peaks") or []
         desc = "; ".join(f"{p['t_s']} s ({p['width_ms']:.0f} ms, {p['share_above_1khz']:.0%} above 1 kHz)" for p in pk[:4])
