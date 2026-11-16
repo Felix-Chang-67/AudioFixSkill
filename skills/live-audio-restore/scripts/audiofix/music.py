@@ -124,7 +124,7 @@ def run(x, st, plan, music_mask, work, log=print):
     be0 = M.get("band_ext") or {}
     fill_from = (be0["cutoff_hz"] if be0.get("enabled") and be0.get("method", "fill") == "fill"
                  and profiles.hf_curve(prof) is not None else None)
-    info = {"ledger": [], "balance": [], "overall_eq": []}
+    info = {"ledger": [], "balance": [], "overall_eq": [], "dynamics": {}}
     mm = music_mask[:n]
     pl = np.asarray(prof["ltas"])
 
@@ -264,6 +264,7 @@ def run(x, st, plan, music_mask, work, log=print):
                 r, at, rl, pc = D[s]
                 st[s], a = dsp.compress(st[s], r, at, rl, pct=pc)
                 log(f"[music] compress {s}: {r}:1 {a}")
+                info["dynamics"][s] = round(float(a.get("mean_gr_db") or 0.0), 2)
             snap("stem dynamics", mixnow())
         y = sum(st.values()) + res
         if D["enabled"]:

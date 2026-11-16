@@ -103,6 +103,7 @@ def material(D):
             f"studio one. Its tone is still the target; check the low-end EQ and the balance against what is played")})
     if D.get("music") and ref.get("used") in ("jrock_band",) and ref.get("auto"):
         items.append({"kind": "reference", "text": f"Tone target: the generic profile. {ref.get('why', '')}"})
+    items += missing(D)
     cr = D.get("codec_repair") or {}
     if cr.get("applied"):
         items.append({"kind": "highs", "text": (
@@ -110,6 +111,44 @@ def material(D):
             f"Apollo, and the band above the cut-off is rebuilt toward the reference's level: the top octave is "
             f"synthesized. Say so; if the listener hears it as fake or harsh, or the vocal as digital or scattered, "
             f"music.band_ext.below_ref_db=3 puts it 3 dB under the reference")})
+    return items
+
+
+def missing(D):
+    """What this machine could not do, and what the listener loses by it. An assistant in a sandbox without PyTorch or
+    internet delivered a render without stems, codec repair or the studio reference, and never said so."""
+    items = []
+    cap = D.get("capabilities") or {}
+    mu = D.get("music")
+    if mu and not D.get("stems_dir"):
+        items.append({"kind": "missing", "text": (
+            "No stem separation (demucs + PyTorch not installed, or --no-stems): the vocal, drums, bass and guitars "
+            "could not be treated one by one. No width correction of the vocal, no stem balance, no per-instrument tone "
+            "or dynamics: only the whole mix was processed. Tell the listener the result is a partial restoration and "
+            "that a machine with PyTorch (bash scripts/setup.sh) does the full one")})
+    cr = D.get("codec_repair") or {}
+    if cr.get("codec_damage") and not cr.get("applied"):
+        items.append({"kind": "missing", "text": (
+            "Low-bitrate codec damage was found but not repaired (Apollo needs PyTorch and a one-time download, or "
+            "--codec-repair off was given): the highs keep the codec's sparse, metallic texture, and the rebuilt top is "
+            "copied from it. Tell the listener the highs may sound fake or swirly for that reason")})
+    if mu and not cap.get("delimiter"):
+        from .plan import is_limited
+        if is_limited(mu.get("loudness") or {"lra_lu": 99, "plr_db": 99}):
+            items.append({"kind": "missing", "text": (
+                "The music is limited, but the neural De-limiter is not installed: stronger drum-transient shaping "
+                "was used instead, which brings back less punch")})
+    if D.get("speech") and not cap.get("asr"):
+        items.append({"kind": "missing", "text": (
+            "No Whisper (faster-whisper): the talker was located by voicing (about 80 % accurate) and the check that "
+            "the words are still recognised was skipped")})
+    if not cap.get("ffmpeg"):
+        items.append({"kind": "missing", "text": "No ffmpeg: no AAC copy for phones, no stationary denoise or declip"})
+    ref = D.get("reference") or {}
+    if mu and ref.get("auto") and "no network" in (ref.get("why") or ""):
+        items.append({"kind": "missing", "text": (
+            "No internet: the song's studio version could not be looked up, so the tone was matched to a generic "
+            "profile. Ask the listener for the studio track (references/other-ai.md)")})
     return items
 
 
@@ -122,6 +161,50 @@ def _flat(d, pre=""):
             out.update(_flat(v, f"{pre}{k}."))
         else:
             out[f"{pre}{k}"] = v
+    return out
+
+
+def _remedy(step, P, steps):
+    """A safe setting change that undoes what `step` did to the measure, or None (left to the assistant)."""
+    M = P.get("music") or {}
+    dyn = M.get("dynamics") or {}
+    if step == "stem dynamics" and dyn.get("enabled"):
+        gr = (steps or {}).get("dynamics") or {}
+        cands = [(gr.get(s, 0.0), s) for s in ("vocals", "other", "bass") if dyn.get(s) and dyn[s][0] > 1.0]
+        if cands and max(cands)[0] > 0.3:
+            s = max(cands)[1]                                  # the compressor that worked hardest
+            return {f"music.dynamics.{s}": [1.0] + list(dyn[s][1:])}
+    if step == "bus glue" and dyn.get("bus") and dyn["bus"][0] > 1.0:
+        return {"music.dynamics.bus": [1.0] + list(dyn["bus"][1:])}
+    if step == "master" and (P.get("master") or {}).get("over1_max_pct", 0) > 2.5:
+        return {"master.over1_max_pct": 2.5, "master.over2_max_pct": 0.5}
+    if step == "de-ess" and (M.get("deess") or {}).get("max_cut_db", 0) > 3:
+        return {"music.deess.max_cut_db": 3}
+    return None
+
+
+def autofix(V, P, steps, explicit=()):
+    """For each WARN the ledger traces to a step with a safe remedy: the settings to change. One fix per WARN, never a
+    setting the assistant set by hand. Fixes that need judgement (tone, width) are left to the [review] lines."""
+    led = (steps or {}).get("ledger") or []
+    out = []
+    for c in V.get("checks", []):
+        if c["pass"] or c["check"] not in WARN_MEASURE:
+            continue
+        key, bad = WARN_MEASURE[c["check"]]
+        if key == "lra_lu" and not ((P.get("music") or {}).get("macro") or {}).get("enabled"):
+            out.append(({"music.macro.enabled": True}, f"WARN '{c['check']}': the original's loudness contour was not "
+                                                       f"put back"))
+            continue
+        if len(led) < 2:
+            continue
+        moves = sorted([(led[i]["step"], led[i][key] - led[i - 1][key]) for i in range(1, len(led))
+                        if (led[i][key] - led[i - 1][key]) * bad > 0.05], key=lambda s: -abs(s[1]))
+        for step, d in moves:
+            fx = _remedy(step, P, steps)
+            if fx and not (set(fx) & set(explicit)):
+                out.append((fx, f"WARN '{c['check']}': {step} moved {key} by {d:+.2f}"))
+                break
     return out
 
 

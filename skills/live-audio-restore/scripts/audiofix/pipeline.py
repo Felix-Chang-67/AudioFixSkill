@@ -69,8 +69,8 @@ def restore(work, plan, log=print):
         mi["ledger"].append(row)
         log(f"[music]   after master: crest {row['crest3s_db']} dB, LRA {row['lra_lu']} LU, loudness {row['lufs']} LUFS")
         with open(os.path.join(work, "steps.json"), "w") as fh:
-            json.dump({k: mi.get(k) for k in ("ledger", "balance", "overall_eq")}, fh, ensure_ascii=False, indent=1,
-                      default=float)
+            json.dump({k: mi.get(k) for k in ("ledger", "balance", "overall_eq", "dynamics", "band_ext")}, fh,
+                      ensure_ascii=False, indent=1, default=float)
     out = os.path.join(work, "restored.wav")
     audio_io.save_wav(out, y, bits=24)
     audio_io.encode_aac(out, os.path.join(work, "restored.m4a"))

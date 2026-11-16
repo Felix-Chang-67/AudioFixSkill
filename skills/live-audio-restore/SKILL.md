@@ -75,7 +75,8 @@ verify**. The plan is plain JSON, so you or the user can read and change it befo
    - a weak or generic tone reference;
    - rebuilt highs;
    - an EQ or balance step that ran into its limit;
-   - the edits you made to the default plan.
+   - what this machine could not do (no PyTorch, no internet, no ffmpeg) and what the result lacks because of it;
+   - the edits you or the autofix made to the default plan.
 
    Answer every one in the delivery. Assistants that stopped at PASS shipped applause raised by 6 dB and a vocal
    lowered by 4.4 dB.
@@ -233,8 +234,16 @@ python3 scripts/audiofix.py verify --work WORK       # re-check an existing rend
 Every check is PASS or WARN, with before and after numbers. `review.md` traces each WARN to the step that moved its
 measure (the ledger in `steps.json`) and names that step's knob.
 
-- Change that one knob, re-render, and compare. The previous render stays in `previous/`, and `review.md` lists what
-  changed between the two.
+- When that step has a safe remedy, `restore` applies it once on its own and prints `[autofix]` lines. The remedies:
+  - the compressor that worked hardest, off;
+  - the bus glue, off;
+  - the open-source limiter criteria for the master;
+  - a gentler de-esser;
+  - the loudness contour put back.
+  It keeps the fixed render only if the WARNs go down; otherwise the earlier one is put back. Name the edit in the
+  delivery. `--no-autofix` leaves it to you.
+- Otherwise change that one knob yourself, re-render, and compare. The previous render stays in `previous/`, and
+  `review.md` lists what changed between the two.
 - Do not change several knobs at once. Do not run control renders by hand: the ledger already shows which step did
   what.
 

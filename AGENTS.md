@@ -38,7 +38,11 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
      delivery. They cover applause, missing instruments, extreme peaks, a weak reference, rebuilt highs, steps at
      their limits, and your edits to the default plan.
    - `review.md` traces each WARN to the step that caused it (the ledger in `steps.json`) and names its knob.
+   - When that step has a safe remedy, `restore` applies it once on its own (`[autofix]` lines) and keeps the result
+     only if the WARNs go down. Name that edit and its reason in the delivery. `--no-autofix` turns this off.
    - Change one knob at a time and re-render. The last render stays in `previous/` for comparison.
+   - `missing` items say what this machine could not do (no PyTorch, no internet, no ffmpeg). Tell the user what the
+     result lacks because of it.
 7. Never overwrite the user's source file; everything goes into the work folder.
 8. Explain the result in the user's language, in plain words.
 
@@ -52,6 +56,10 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
 - **Test clips:** `python3 scripts/make_test_clip.py song|mc out.m4a` makes a synthetic clip with known problems.
   - Eval cases live in `skills/live-audio-restore/evals/`.
   - A change should keep every check in `verification.md` at PASS on both eval clips.
+- **Regression baseline:** after changing a rule, run `python3 scripts/regress.py` from `skills/live-audio-restore/`.
+  - It checks `evals/regression.json`: what correct runs concluded on every recording the skill was tuned on.
+  - The two synthetic clips run anywhere. `--media DIR` adds your copies of the other recordings (not distributed).
+  - Every expectation must stay PASS. A fix for one song must not break another.
 - **Environment switches:**
   - `AUDIOFIX_NO_NUMBA=1` and `AUDIOFIX_NO_ASR=1` test the fallbacks.
   - `AUDIOFIX_ASR_MODEL` and `AUDIOFIX_ASR_LANG` set the Whisper model and language.

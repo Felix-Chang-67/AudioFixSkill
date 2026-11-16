@@ -44,6 +44,7 @@ delivery.
 | limits | Overall EQ at its +6 dB cap, or a stem balance move at its limit | What stayed short and why a bigger boost would only lift noise |
 | edits | The plan used against the default plan | Every edit, with its reason |
 | previous | The plan and checks of the render before | What changed, and the comparison file |
+| missing | No stems, codec damage left unrepaired, no De-limiter on a limited source, no Whisper, no ffmpeg, no internet for the studio version | What the result lacks for it, and that a full machine (bash scripts/setup.sh) does more |
 
 **The step ledger (`steps.json`).** After every music step, the render records the music's loudness, 3 s crest,
 loudness range, mono-sum loss and tone deviation from the reference. A WARN is traced to the steps that moved its
@@ -52,6 +53,37 @@ measure the wrong way.
 Example: on a vocal-led acoustic song, the crest lost 0.5 dB in the stem dynamics (the vocal compressor). The drum
 stem's peak limit was needed: it held back the claps of the applause. Without the ledger, the cause took four
 control renders to find.
+
+**Autofix.** When a WARN is traced to a step with a safe remedy, `restore` (and `auto`) change that one setting and
+render once more:
+
+| Step | Remedy |
+|---|---|
+| Stem dynamics | The compressor with the most gain reduction, off (ratio 1.0) |
+| Bus glue | Off |
+| Master | The open-source criteria, 2.5 % and 0.5 % |
+| De-ess | At most 3 dB |
+| A lost loudness range with the contour step off | The contour step on |
+
+- The fixed render is kept only if the WARN count goes down. Otherwise the earlier render is put back, and the fixed
+  one stays in `autofix_rejected/`.
+- A setting given by hand with `--set` is never changed.
+- Tone, width and anti-phase WARNs need judgement and stay with the assistant.
+
+## Regression baseline
+
+`scripts/regress.py` runs `auto` on every recording of `evals/regression.json` it can find and checks each
+expectation. The expectations record what correct runs concluded on each recording the skill was tuned on, for
+example:
+
+- a broadcast is limited;
+- a dense live song is not;
+- applause is reported;
+- the rebuilt top is within 1.5 dB of the studio version;
+- all checks PASS after the autofix.
+
+The two synthetic clips ship with the skill. The other recordings are not distributed: `--media DIR` points to your
+copies. Run it after every rule change.
 
 ## Numbers to quote in the delivery
 

@@ -152,6 +152,48 @@ def _verify(a, P, rep, log):
     return V
 
 
+def _warns(V):
+    return sum(not c["pass"] for c in V.get("checks", []))
+
+
+def _swap_back(work, log):
+    """Put the render before the autofix back in place; the rejected one goes to autofix_rejected/."""
+    rej = os.path.join(work, "autofix_rejected")
+    os.makedirs(rej, exist_ok=True)
+    for f in KEEP:
+        cur, old = os.path.join(work, f), os.path.join(work, "previous", f)
+        if os.path.exists(old):
+            if os.path.exists(cur):
+                os.replace(cur, os.path.join(rej, f))
+            os.replace(old, cur)
+    log(f"[autofix] kept the render before the fix; the fixed one is in {rej}")
+
+
+def _autofix(a, V, P, log):
+    """WARNs the step ledger traces to a step with a safe remedy are fixed once, automatically: the same input gives
+    the same result whichever assistant runs it. Kept only if the WARN count goes down."""
+    if getattr(a, "no_autofix", False) or not V.get("checks"):
+        return V
+    explicit = [s.split("=", 1)[0] for s in (a.set or [])]
+    fixes = review.autofix(V, P, review.load_json(os.path.join(a.work, "steps.json")), explicit)
+    if not fixes:
+        return V
+    sets = []
+    for fx, why in fixes:
+        sets += [f"{k}={json.dumps(v)}" for k, v in fx.items()]
+        log(f"[autofix] {why}: " + ", ".join(f"{k}={v}" for k, v in fx.items()) + "; re-rendering once")
+    b = argparse.Namespace(**vars(a))
+    b.plan, b.set = os.path.join(a.work, "plan_used.json"), sets
+    P2, rep2 = _restore(b, log)
+    V2 = _verify(b, P2, rep2, log)
+    if _warns(V2) >= _warns(V):
+        log(f"[autofix] WARNs {_warns(V)} -> {_warns(V2)}: the fix did not help")
+        _swap_back(a.work, log)
+        return V
+    log(f"[autofix] WARNs {_warns(V)} -> {_warns(V2)}. Name this edit and its reason in the delivery")
+    return V2
+
+
 def cmd_analyze(a):
     os.makedirs(a.work, exist_ok=True)
     _analyze(a, Log(a.work))
@@ -161,7 +203,7 @@ def cmd_restore(a):
     log = Log(a.work)
     P, rep = _restore(a, log)
     if not a.no_verify:
-        _verify(a, P, rep, log)
+        _autofix(a, _verify(a, P, rep, log), P, log)
 
 
 def cmd_verify(a):
@@ -178,7 +220,7 @@ def cmd_auto(a):
     _analyze(a, log)
     a.plan = None
     P, rep = _restore(a, log)
-    _verify(a, P, rep, log)
+    _autofix(a, _verify(a, P, rep, log), P, log)
 
 
 def main(argv=None):
@@ -228,6 +270,7 @@ def main(argv=None):
     r.add_argument("--plan")
     r.add_argument("--set", nargs="*", help="edits like music.delimit.depth=1.5 speech.crowd.enabled=false")
     r.add_argument("--no-verify", action="store_true")
+    r.add_argument("--no-autofix", action="store_true", help="do not fix a WARN automatically (see review.md)")
     r.add_argument("--no-plots", action="store_true")
     v = sub.add_parser("verify", help="metrics, checks, A/B file and plots for a rendered work folder")
     v.add_argument("--work", required=True)
@@ -235,6 +278,7 @@ def main(argv=None):
     au = sub.add_parser("auto", help="analyze + restore + verify in one go")
     common(au)
     au.add_argument("--set", nargs="*")
+    au.add_argument("--no-autofix", action="store_true", help="do not fix a WARN automatically (see review.md)")
     au.add_argument("--no-plots", action="store_true")
     a = ap.parse_args(argv)
     {"check": cmd_check, "profile": cmd_profile, "analyze": cmd_analyze, "restore": cmd_restore,

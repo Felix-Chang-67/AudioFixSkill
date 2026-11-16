@@ -38,6 +38,9 @@ torch/demucs/numba.
    Without stems, songs and talk cannot be told apart automatically: the drum and bass stems are what separates
    them, and Whisper alone cannot, because lyrics are words too. Tell the assistant which it is.
 
+   `review.md` lists everything the sandbox could not do as `missing` items: no stems, no codec repair, no studio
+   version. The assistant should tell you each one.
+
    Without internet, the studio version of the song cannot be looked up either, and the tone is matched to the
    bundled generic profile. For a song, the assistant should ask you for the studio version: a WAV copy of the
    track, or of any 30 s of it. Then it builds the reference first:

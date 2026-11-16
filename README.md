@@ -105,6 +105,7 @@ python3 scripts/audiofix.py auto 整场.m4a --work out                   # 歌�
 | `review.md` | 交付前要逐条回答的检查项：掌声、缺失的乐器、异常尖峰、参考是否可靠、重建的高频、到达上限的步骤、对默认方案的改动；每条警告由哪一步造成、该调哪个参数 |
 | `steps.json` | 每一步处理后的响度、瞬态、动态范围、单声道兼容和音色偏差（"账本"） |
 | `previous/` | 上一次渲染的结果、方案和检查，用来对比 |
+| `autofix_rejected/` | 自动修复没有减少警告时，被放弃的那一版 |
 | `plan.json` | 修复计划，每一步都有 `why` |
 | `restored.wav` | 修复结果，24-bit / 44.1 kHz |
 | `restored.m4a` | AAC 256k 副本，方便手机听 |
