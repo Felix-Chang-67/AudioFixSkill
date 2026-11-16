@@ -37,8 +37,12 @@ band extension (step 8) still runs. It now works from a natural band.
 installed. Everything after it uses `input_repaired.wav`. The cut-off and the global numbers stay those of the
 original, and `verify` compares with the original.
 
-**Cost.** About 6x real time on CPU: a 5 min song takes about 30 min. For long concerts, use `--codec-repair off`,
-or run it overnight.
+**Cost.** On the CPU, about 6x real time: a 5 min song takes about 30 min.
+
+- It runs on an NVIDIA (CUDA) or Apple silicon (MPS) GPU when one is found (`device.py`), which is much faster.
+- A failing GPU run (out of memory, an operation MPS lacks) falls back to the CPU.
+- `AUDIOFIX_DEVICE=cpu|cuda|mps` forces a device.
+- Without a GPU, use `--codec-repair off` for long concerts, or run it overnight.
 
 **Safety.** The checkpoint is loaded with torch's restricted unpickler and an allowlist of the plain classes it
 references. The omegaconf classes are stand-ins, so nothing in the file can run code.
@@ -238,6 +242,9 @@ example. A master limiter would then duck the whole mix on every hit, which is a
 
 ## 7. Overall tone match (`match`)
 
+With a same-song reference whose passage `analyze` found (`match.measure_section`), steps 4, 5 and 7 measure on
+that passage only and apply one fixed curve to the whole song. See `diagnosis.md`, "Like with like".
+
 After the stems are summed, the long-term spectrum (1/6 octave, normalised at 0.5-2 kHz) moves `alpha` = 85 % toward
 the reference profile:
 
@@ -336,6 +343,11 @@ another:
 The limiter is 4x inter-sample-aware, with a 1.5 ms ramp, 120 ms release and a ceiling of -1 dBTP.
 
 On the open example, the open-source criteria kept 14.5 dB of crest (source 14.8) at -13 LUFS (source -15.4).
+
+**Crest guard (open sources).** The plan's `min_crest_db` is the original's 3 s crest minus 0.5 dB. At each
+candidate level that meets the limiter criteria, the limited music's crest is computed, and the level steps down
+0.5 dB until it holds. On the test song, -13.0 LUFS gave 14.26 dB against a floor of 14.30, so the master took
+-13.5 LUFS (14.41 dB). This is what verify's dynamics check measures, so it no longer needs a hand edit.
 
 - Why this measure: "busy time" counts even 0.01 dB of release tail, and "maximum reduction" is set by one freak
   peak. Time spent above 1 and 2 dB is what you can hear.

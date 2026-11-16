@@ -11,7 +11,7 @@ delivery message comes from these numbers, and the user's own listening of `AB.w
 |---|---|---|
 | True peak under the ceiling | ≤ ceiling + 0.1 dB | Should never happen; report it |
 | No new clipping | Flat runs/min ≤ max(5, input) | Something overloaded before the limiter |
-| Music: closer to the reference tone | RMS deviation 50 Hz-16 kHz (below the cut-off) decreased | Wrong profile for this music, or a very short music part |
+| Music: closer to the reference tone | RMS deviation 50 Hz-16 kHz (below the cut-off) decreased. With a same-song reference, measured on the passage it shows | Wrong profile for this music, or a very short music part |
 | Music: dynamics not squashed further | 3 s crest ≥ input - 0.5 dB | Loudness target too high, or de-limiting off |
 | Music: the song's quiet and loud parts kept apart (open recordings only) | Loudness range (LRA) ≥ input - 2 LU | The song was flattened: compression too firm, or the contour step off |
 | Music: not quieter than the original (open recordings only) | Integrated loudness ≥ input - 0.5 dB | Master criteria set too strict: a quieter result reads as "nothing changed" |

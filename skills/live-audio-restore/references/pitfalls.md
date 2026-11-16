@@ -166,3 +166,9 @@ The same audience recording was restored twice with this skill: once by Claude, 
     - Boosting that much would lift the cymbal bleed in the vocal stem too. The vocal's presence boost is capped at
       +6 dB and scaled by how much of each band the vocal owns. The rest of the gap is information the recording
       does not hold.
+35. **A preview is one passage; a live song is many.**
+    - Matching the whole live song's average spectrum to a 30 s chorus preview over-boosted the lows by 5-7 dB in
+      the chorus itself. The live recording's low end varied by 8 dB between passages.
+    - Now the preview's passage is found in the recording by chroma, and the tone is measured there.
+36. **"The same song" can be a live version.** The song search returned the album track and a live-album recording
+    of it, whose vocal width differed by 20 dB. The filter now keeps the studio version.

@@ -8,7 +8,10 @@ tone otherwise unchanged. Its own extension above the cut-off is weak, so the ba
 
 The checkpoint is loaded with torch's restricted unpickler and an allowlist of the plain classes it references
 (collections, omegaconf containers, torch storages); the omegaconf classes are stand-ins when omegaconf 2 is not
-installed, so no arbitrary code from the file can run. CPU speed: about 6x real time (a 5 min song ~ 30 min)."""
+installed, so no arbitrary code from the file can run.
+
+Speed: on the CPU about 6x real time (a 5 min song takes about 30 min). It runs on an NVIDIA (CUDA) or Apple
+silicon (MPS) GPU when there is one (device.py), and falls back to the CPU if the GPU run fails."""
 import os, sys, time, types
 import numpy as np
 
@@ -88,10 +91,24 @@ def _load_model():
 
 
 def repair(x, chunk_s=10.0, overlap_s=1.0, log=print):
-    """x: (n, 2) float32 at 44.1 kHz -> repaired (n, 2) float32. Chunked, crossfaded."""
+    """x: (n, 2) float32 at 44.1 kHz -> repaired (n, 2) float32. Chunked, crossfaded. Runs on the GPU when there is
+    one (CUDA or MPS, see device.py) and falls back to the CPU if the GPU run fails."""
+    from . import device
+    dev = device.pick(log)
+    log(f"[codec] Apollo on {device.describe() if dev != 'cpu' else 'cpu'}")
+    if dev != "cpu":
+        try:
+            return _run(x, chunk_s, overlap_s, log, dev)
+        except Exception as e:                                   # noqa: BLE001 (out of memory, unsupported op ...)
+            log(f"[codec] {dev} run failed ({str(e)[:120]}): running on the CPU instead")
+    return _run(x, chunk_s, overlap_s, log, "cpu")
+
+
+def _run(x, chunk_s, overlap_s, log, dev):
     import torch
-    model = _load_model()
-    torch.set_num_threads(max(1, os.cpu_count() or 1))
+    model = _load_model().to(dev)
+    if dev == "cpu":
+        torch.set_num_threads(max(1, os.cpu_count() or 1))
     t = torch.from_numpy(np.ascontiguousarray(x.T, dtype=np.float32)).unsqueeze(0)
     n = t.shape[-1]
     C, O = int(chunk_s * SR), int(overlap_s * SR)
@@ -104,7 +121,7 @@ def repair(x, chunk_s=10.0, overlap_s=1.0, log=print):
             seg = t[..., start:end]
             if seg.shape[-1] < C:
                 seg = torch.nn.functional.pad(seg, (0, C - seg.shape[-1]))
-            o = model(seg)[..., :end - start]
+            o = model(seg.to(dev))[..., :end - start].to("cpu")
             w = torch.ones(end - start)
             if start > 0:
                 w[:O] = torch.linspace(0, 1, O)

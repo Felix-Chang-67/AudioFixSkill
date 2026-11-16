@@ -28,7 +28,14 @@ def music_target(ym, lu0, M, log):
         o1, o2 = float(np.mean(gr > 1) * 100), float(np.mean(gr > 2) * 100)
         log(f"[master] try {t:.1f} LUFS: limiter above 1 dB {o1:.1f} %, above 2 dB {o2:.1f} %")
         if o1 <= M["over1_max_pct"] and o2 <= M["over2_max_pct"]:
-            return t
+            mc = M.get("min_crest_db")
+            if mc is None:
+                return t
+            # open recordings: also keep the 3 s crest within 0.5 dB of the original (what verify checks)
+            c = loudness.crest_3s(ym * float(undb(t - lu0)) * np.reshape(g, (-1, 1)))
+            log(f"[master]   3 s crest at {t:.1f} LUFS: {c:.2f} dB (keep >= {mc:.2f})")
+            if c >= mc:
+                return t
         t -= 0.5
     return hi
 

@@ -52,7 +52,8 @@ torch/demucs/numba.
 
 ## Long jobs
 
-Codec repair runs at about 6x real time on CPU: a 5 min song takes about 30 min. Assistants with short tool
+Codec repair runs at about 6x real time on the CPU: a 5 min song takes about 30 min. It uses an NVIDIA or Apple
+silicon GPU automatically when there is one (`check` shows which), and is then much faster. Assistants with short tool
 time-outs should start `analyze` in the background, or ask the user to run it, and continue from the work folder.
 `input_repaired.wav` is cached, so a rerun does not repeat it.
 

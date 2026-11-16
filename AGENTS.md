@@ -41,4 +41,6 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
 - **Environment switches:**
   - `AUDIOFIX_NO_NUMBA=1` and `AUDIOFIX_NO_ASR=1` test the fallbacks.
   - `AUDIOFIX_ASR_MODEL` and `AUDIOFIX_ASR_LANG` set the Whisper model and language.
-  - `AUDIOFIX_DELIMITER` is the De-limiter checkout path.
+  - `AUDIOFIX_DELIMITER` is the De-limiter checkout path; `AUDIOFIX_APOLLO` is the Apollo checkout path.
+  - `AUDIOFIX_DEVICE=auto|cuda|mps|cpu` picks the device for Apollo and demucs. Auto uses a CUDA or MPS GPU when
+    there is one; a missing or failing GPU falls back to the CPU.

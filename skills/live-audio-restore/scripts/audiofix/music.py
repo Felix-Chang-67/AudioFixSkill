@@ -92,6 +92,16 @@ def run(x, st, plan, music_mask, work, log=print):
     prof = profiles.load(plan["profiles"]["music"])
     secs = full_cover(plan.get("sections"), n / SR)
     W = dsp.ramp_weights(n, secs)
+    # same-song reference: measure tone and balance on the passage the reference shows (like with like), and apply
+    # the result to the whole song; otherwise per recording-chain section, measured over all of it
+    ms = (M.get("match") or {}).get("measure_section")
+    if ms:
+        meas = np.zeros(n, bool)
+        meas[int(ms[0] * SR):int(ms[1] * SR)] = True
+        meas &= music_mask[:n]
+        tsecs, TW = [[0.0, n / SR]], [np.ones(n, np.float32)]
+    else:
+        meas, tsecs, TW = music_mask, secs, W
     cutoff = plan["music"]["band_ext"]["cutoff_hz"] if M.get("band_ext") else None
     info = {}
 
@@ -158,14 +168,14 @@ def run(x, st, plan, music_mask, work, log=print):
             for s in st:
                 core = profiles.CORE[s]
                 pres = M["stem_match"].get("vocal_presence_db") if s == "vocals" else None
-                curves = [_stem_curve(_sel(st[s], a, b, music_mask), _sel(mix, a, b, music_mask),
+                curves = [_stem_curve(_sel(st[s], a, b, meas), _sel(mix, a, b, meas),
                                       np.asarray(prof["stems"][s]["shape"]), core, M["stem_match"],
-                                      s in ("bass", "drums"), pres) for a, b in secs]
-                st[s] = dsp.apply_sectioned(st[s], [dsp.fir_from_curve(c) for c in curves], W)
-                for (a, b), c in zip(secs, curves):
+                                      s in ("bass", "drums"), pres) for a, b in tsecs]
+                st[s] = dsp.apply_sectioned(st[s], [dsp.fir_from_curve(c) for c in curves], TW)
+                for (a, b), c in zip(tsecs, curves):
                     log(f"[music] stem EQ {s:6s} {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
                 if s == "vocals":                       # the vocal chain's correction, reused for MCs (speech v2)
-                    info["vocal_eq"] = {"cent": [round(float(c), 2) for c in CENT], "sections": secs,
+                    info["vocal_eq"] = {"cent": [round(float(c), 2) for c in CENT], "sections": tsecs,
                                         "curves": [[round(float(v), 2) for v in c] for c in curves],
                                         "mean": [round(float(v), 2) for v in np.mean(curves, axis=0)]}
                     with open(os.path.join(work, "vocal_eq.json"), "w") as fh:
@@ -173,11 +183,11 @@ def run(x, st, plan, music_mask, work, log=print):
         # 5. balance, per section
         if M["balance"]["enabled"] and prof.get("stems"):
             gains = {s: np.zeros(n, np.float32) for s in st}
-            for (a, b), w in zip(secs, W):
-                mixs = _sel(sum(st.values()) + res, a, b, music_mask)
+            for (a, b), w in zip(tsecs, TW):
+                mixs = _sel(sum(st.values()) + res, a, b, meas)
                 pm = np.mean(mixs.astype(np.float64) ** 2) + 1e-30
                 for s in st:
-                    cur = 10 * np.log10(np.mean(_sel(st[s], a, b, music_mask).astype(np.float64) ** 2) / pm + 1e-30)
+                    cur = 10 * np.log10(np.mean(_sel(st[s], a, b, meas).astype(np.float64) ** 2) / pm + 1e-30)
                     adj = float(np.clip((prof["stems"][s]["ratio_db"] - cur) * M["balance"]["fraction"],
                                         -M["balance"]["limit_db"], M["balance"]["limit_db"]))
                     gains[s] += w * adj
@@ -204,10 +214,10 @@ def run(x, st, plan, music_mask, work, log=print):
     # 7. overall tonal match, per section
     if M["match"]["enabled"]:
         p = M["match"]
-        curves = [dsp.match_curve(dsp.ltas(_sel(y, a, b, music_mask)), np.asarray(prof["ltas"]), p["alpha"],
-                                  p["lo_db"], p["hi_db"], cutoff=cutoff) for a, b in secs]
-        y = dsp.apply_sectioned(y, [dsp.fir_from_curve(c) for c in curves], W)
-        for (a, b), c in zip(secs, curves):
+        curves = [dsp.match_curve(dsp.ltas(_sel(y, a, b, meas)), np.asarray(prof["ltas"]), p["alpha"],
+                                  p["lo_db"], p["hi_db"], cutoff=cutoff) for a, b in tsecs]
+        y = dsp.apply_sectioned(y, [dsp.fir_from_curve(c) for c in curves], TW)
+        for (a, b), c in zip(tsecs, curves):
             log(f"[music] overall EQ {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
     # 8. band extension
     be = M.get("band_ext", {})

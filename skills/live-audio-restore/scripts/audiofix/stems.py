@@ -21,7 +21,16 @@ def separate(wav_path, work, model="htdemucs"):
     folder = os.path.join(out, model, name)
     if all(os.path.exists(os.path.join(folder, f"{s}.wav")) for s in STEMS):
         return folder
-    subprocess.run([sys.executable, "-m", "demucs", "-n", model, "--float32", "-o", out, wav_path], check=True)
+    from . import device
+    dev = device.pick()
+    cmd = [sys.executable, "-m", "demucs", "-n", model, "--float32", "-o", out, "-d", dev, wav_path]
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        if dev == "cpu":
+            raise
+        print(f"[stems] demucs on {dev} failed: running on the CPU instead", flush=True)
+        subprocess.run(cmd[:-2] + ["cpu", wav_path], check=True)
     return folder
 
 

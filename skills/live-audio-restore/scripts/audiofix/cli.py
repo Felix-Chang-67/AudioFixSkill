@@ -28,6 +28,9 @@ def cmd_check(a):
                                "(clones Apollo; the checkpoint downloads on first use)"}
     for k, ok in cap.items():
         print(f"{'ok ' if ok else 'MISSING'} {k}" + ("" if ok else f"  -> {missing.get(k, '')}"))
+    from . import device
+    print(f"compute device for Apollo and demucs: {device.describe()}"
+          + ("" if device.pick() != "cpu" else "  (codec repair: about 6x real time; set AUDIOFIX_DEVICE to force one)"))
     print("profiles:", profiles.available_profiles())
 
 
@@ -44,7 +47,8 @@ def cmd_profile(a):
     if a.kind == "speech" and not files:
         prof = profiles.speech_ltass()
     else:
-        prof = profiles.build(files, a.name, a.kind, work, with_stems=not a.no_stems, source=src or f"{len(files)} files")
+        prof = profiles.build(files, a.name, a.kind, work, with_stems=not a.no_stems, source=src or f"{len(files)} files",
+                              song=bool(a.itunes_song or a.song))
     profiles.save(prof, a.out)
     print(f"profile '{a.name}' from {prof['count']} references -> {a.out}")
 
@@ -129,6 +133,7 @@ def main(argv=None):
     p.add_argument("--kind", choices=["music", "speech"], default="music")
     p.add_argument("--files", nargs="*", help="reference recordings (studio tracks of the same artist/genre, clean speech)")
     p.add_argument("--itunes-artist", help="download official 30 s previews of this artist as references")
+    p.add_argument("--song", action="store_true", help="the --files are the studio version of the very song being restored (analyze then finds the same passage and compares like with like)")
     p.add_argument("--itunes-song", help="with --itunes-artist: only this song (its studio version is the best target)")
     p.add_argument("--limit", type=int, default=30)
     p.add_argument("--country", default="us")

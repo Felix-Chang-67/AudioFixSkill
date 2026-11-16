@@ -157,6 +157,13 @@ def build(D):
         M["match"] = {"enabled": True, "alpha": 0.85, "lo_db": -8.0, "hi_db": 6.0,
                       "why": f"long-term spectrum deviates {mu['tonal']['rms_db']} dB RMS from the profile "
                              f"(by band: {mu['tonal']['by_band']})"}
+        rs = D.get("reference_section")
+        if rs:
+            M["match"]["measure_section"] = [rs["start_s"], rs["end_s"]]
+            M["match"]["why"] += (f". The reference is this song's studio version; its passage was found at "
+                                  f"{rs['start_s']}-{rs['end_s']} s (chroma similarity {rs['similarity']}). Tone and "
+                                  f"stem balance are measured there, like with like, and the fixed EQ applies to the "
+                                  f"whole song (the song's other parts may differ by 8 dB in the low end)")
         bw = D["bandwidth"]
         ext = bw["brick_wall"] and bw["cutoff_hz"] < 18500
         M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": bw["cutoff_hz"], "below_ref_db": 0.0, "noise_mix": 0.5,
@@ -239,11 +246,13 @@ def build(D):
     ml = (D.get("music") or {}).get("loudness")
     music_open = bool(ml) and not (ml["lra_lu"] < 4 or ml["plr_db"] < 11)
     o1, o2 = (2.5, 0.5) if music_open else (8.0, 1.5)
+    min_crest = round(ml["crest3s_db"] - 0.5, 2) if music_open else None
     P["master"] = {"ceiling_dbtp": -1.0, "over1_max_pct": o1, "over2_max_pct": o2, "search_lufs": [-8.0, -14.0],
-                   "speech_only_lufs": -16.0, "speech_offset_db": 4.0,
+                   "min_crest_db": min_crest, "speech_only_lufs": -16.0, "speech_offset_db": 4.0,
                    "why": f"music: the loudest level at which the limiter works above 1 dB at most {o1} % and above 2 dB "
                           f"at most {o2} % of the time ("
                           + ("open recording: the limiter stays almost idle, the dynamics are kept"
+                             + f", and the 3 s crest kept at {min_crest} dB or more (the original's minus 0.5 dB)"
                              if music_open else "limited source: as loud as a modern master without audible limiting")
                           + "); speech-only: -16 LUFS; spoken parts of a concert sit 4 dB under the music"}
     return P

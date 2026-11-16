@@ -60,12 +60,19 @@ def run(work, plan, log=print, make_plots=True):
         prof = profiles.load(plan["profiles"]["music"])
         xm, ym = cat(x, mus), cat(y, mus)
         cut = D["bandwidth"]["cutoff_hz"]
-        ti = measure.tonal_deviation(xm, prof["ltas"], cut)
-        to = measure.tonal_deviation(ym, prof["ltas"], cut)
+        ms = ((plan.get("music") or {}).get("match") or {}).get("measure_section")
+        if ms:                       # same-song reference: compare the passage it shows, like with like
+            xt, yt = x[int(ms[0] * SR):int(ms[1] * SR)], y[int(ms[0] * SR):int(ms[1] * SR)]
+        else:
+            xt, yt = xm, ym
+        ti = measure.tonal_deviation(xt, prof["ltas"], cut)
+        to = measure.tonal_deviation(yt, prof["ltas"], cut)
         li, lo = loudness.summary(xm), loudness.summary(ym)
         si, so = measure.stereo(xm), measure.stereo(ym)
         V["music"] = {"input": {"loudness": li, "tonal": ti, "stereo": si}, "output": {"loudness": lo, "tonal": to, "stereo": so}}
-        chk("music: closer to the reference tone", to["rms_db"] < ti["rms_db"], f"RMS deviation {ti['rms_db']} -> {to['rms_db']} dB")
+        chk("music: closer to the reference tone", to["rms_db"] < ti["rms_db"],
+            f"RMS deviation {ti['rms_db']} -> {to['rms_db']} dB"
+            + (f" (on the reference passage {ms[0]:.0f}-{ms[1]:.0f} s)" if ms else ""))
         chk("music: dynamics not squashed further", lo["crest3s_db"] >= li["crest3s_db"] - 0.5,
             f"3 s crest {li['crest3s_db']} -> {lo['crest3s_db']} dB, PLR {li['plr_db']} -> {lo['plr_db']} dB")
         if li["lra_lu"] >= 4 and li["plr_db"] >= 11:

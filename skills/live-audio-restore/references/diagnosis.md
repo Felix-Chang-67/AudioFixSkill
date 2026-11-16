@@ -164,7 +164,7 @@ phase by band), the 3-10 kHz share by stem, and the tone deviation against the m
 | Overall tone match | Always (with a profile) | 85 % toward the profile, -8 to +6 dB, no boosts above the cut-off, per section |
 | Band extension | Brick wall below 18.5 kHz | SBR-style shift of the band below the cut-off, half of it replaced by a noise-like copy with the same envelope (`noise_mix` 0.5); level set so the band above the cut-off matches the profile's top octave |
 | Bass to mono | Stereo | Below 100 Hz |
-| Loudness | Always | Loudest target where the limiter exceeds 1 dB at most 8 % of the time and 2 dB at most 1.5 % (limited source), or 2.5 % and 0.5 % (open source) |
+| Loudness | Always | Loudest target where the limiter exceeds 1 dB at most 8 % of the time and 2 dB at most 1.5 % (limited source), or 2.5 % and 0.5 % (open source). Open sources also keep their 3 s crest within 0.5 dB of the original: the target steps down 0.5 dB until it does |
 
 **Limited or open: the decision behind four steps.** LRA < 4 LU or PLR < 11 dB means a limiter already flattened
 the recording (broadcasts, loud uploads). Undoing that is part of the restoration, and the master may be loud.
@@ -209,6 +209,18 @@ Best of all is the studio version of the very song:
 
 On an audience recording, the artist's 27-song average left 100-400 Hz 5-12 dB under that song's own studio
 master. Songs differ: that one has a loud bass. Its own 30 s preview brought the section within ±3 dB.
+
+**Like with like.** A preview is one passage, usually the chorus, and a live recording's tone can change a lot
+between passages: one measured 8 dB more low end in the previewed passage than in the song as a whole. Matching
+the whole song's average to the preview over-boosted the lows by 5-7 dB in that very passage.
+
+A same-song profile therefore carries the preview's chroma, and `analyze` finds the passage in the recording
+(tempo-tolerant chroma cross-similarity, at least 0.85; 0.91 on the test song). Tone and stem balance are measured
+there, and the resulting fixed EQ applies to the whole song. On the test song this brought the mix within 1.7 dB
+RMS of the studio master in that passage, against 2.9 dB with the whole-song average.
+
+`--itunes-song` keeps the studio version: an exact title match without "live", "remix", "instrumental" and
+the like. The first try picked up a live-album version too.
 
 ## 5. Speech path: decisions
 

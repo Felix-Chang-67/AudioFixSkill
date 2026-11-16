@@ -99,7 +99,7 @@ The **reference** decides what "good" means for the tone, so pick it deliberatel
 
 | Situation | Reference |
 |---|---|
-| A single song, and its studio version exists | `profile --name X --itunes-artist "Artist" --itunes-song "Title" [--country jp]`, or `--files` with the track: **the best reference**, it is what "like the album" means. On an audience recording, it brought 100-400 Hz from 5-12 dB off to ±3 dB |
+| A single song, and its studio version exists | `profile --name X --itunes-artist "Artist" --itunes-song "Title" [--country jp]`, or `--files track --song`: **the best reference**, it is what "like the album" means. `analyze` finds the preview's passage in the recording and measures tone there, like with like. On an audience recording, it brought the mix within 1.7 dB RMS of the studio master in that passage. Live, remix and similar versions are skipped |
 | The user has studio tracks of this artist | `profile --name X --files a.flac b.mp3 ...` |
 | Online, artist known | `profile --name X --itunes-artist "Artist" [--country jp]`: official 30 s previews, about 1 min per 3 clips |
 | Neither | Bundled `jrock_band` (guitar band, loud modern master). For other genres, build a profile from any representative studio tracks the user can supply |
@@ -118,7 +118,7 @@ python3 scripts/audiofix.py check
 | De-limiter | Over-limited music gets stronger drum-transient shaping instead of neural de-limiting |
 | faster-whisper | The MC talker is located by voicing instead of word timings (about 80 % accurate against word timings); `verify` loses the intelligibility check |
 | numba | Slower, vectorised approximations |
-| Apollo (codec repair) | On low-bitrate rips (codec wall below 16 kHz), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It is slow on CPU, about 6x real time, so for long concerts you may choose `--codec-repair off` on purpose |
+| Apollo (codec repair) | On low-bitrate rips (codec wall below 16 kHz), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It runs on an NVIDIA (CUDA) or Apple silicon (MPS) GPU when one is found, and falls back to the CPU otherwise or if the GPU run fails. On the CPU it is slow, about 6x real time, so for long concerts you may choose `--codec-repair off` on purpose. `check` shows the device; `AUDIOFIX_DEVICE=cpu|cuda|mps` forces one |
 
 `setup.sh` installs all of them. On a machine without internet, see `references/other-ai.md`.
 

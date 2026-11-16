@@ -72,7 +72,10 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
         if os.path.exists(cached):
             xr = audio_io.load(cached)[:n]
         else:
-            log(f"[analyze] codec repair with Apollo (about {6 * n / SR / 60:.0f} min on CPU) ...")
+            from . import device
+            dev = device.pick(log)
+            log(f"[analyze] codec repair with Apollo on {device.describe()}"
+                + (f" (about {6 * n / SR / 60:.0f} min on the CPU)" if dev == "cpu" else "") + " ...")
             t1 = time.time()
             xr = codec.repair(x, log=log)
             audio_io.save_wav(cached, xr, bits=32)
@@ -137,6 +140,11 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
         M = {"duration_s": round(len(xm) / SR, 1), "loudness": loudness.summary(xm), "stereo": measure.stereo(xm)}
         prof = profiles.load(music_profile)
         M["tonal"] = measure.tonal_deviation(xm, prof["ltas"], D["bandwidth"]["cutoff_hz"])
+        if prof.get("song_chroma"):
+            # the reference is this very song: find its passage, so tone is compared like with like
+            loc = profiles.locate(prof["song_chroma"], x, regions=mus)
+            D["reference_section"] = ({"start_s": loc[0], "end_s": loc[1], "similarity": loc[2]} if loc else None)
+            log(f"[analyze] reference passage in the recording: {D['reference_section'] or 'not found (similarity < 0.85)'}")
         if st is not None:
             sm = {k: cat(v, mus) for k, v in st.items()}
             mixm = sum(sm.values()) + cat(x - sum(st.values()), mus)
