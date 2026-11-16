@@ -16,7 +16,10 @@ python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.
 | Muddy | 200-500 Hz still high | `music.match.alpha=0.95` (closer to the reference) |
 | Harsh, sibilant | Bright vocal or cymbals | `music.deess.max_cut_db=12`; `music.match.alpha=0.95` |
 | Dull, lost its sparkle | Top cut too much, or no band extension | `music.match.lo_db=-4`; `music.band_ext.enabled=true`; `music.band_ext.below_ref_db=-2` |
+| Fake, metallic or harsh highs | The codec's sparse texture, boosted and copied up | Make sure codec repair ran (`analyze --codec-repair on`); `music.band_ext.noise_mix=0.7`; then `music.band_ext.below_ref_db=3` |
 | Fizzy top, "digital" highs | The rebuilt top is too loud | `music.band_ext.below_ref_db=3`; or `music.band_ext.enabled=false` |
+| Not clean, unfocused, the vocal floats, "I can hear the room" | A room-miked image | `music.width_match.enabled=true` (default on room-miked recordings); narrower: lower the targets, e.g. `music.width_match.targets='{"vocals":-35,"drums":-26,"bass":-45}'` |
+| Should sound like the album | The reference is an average, not this song | Build a profile from the song itself: `profile --itunes-artist A --itunes-song S`, then re-analyze with `--music-profile` |
 | Squashed, no punch | Master too loud, or not enough de-limiting | `master.over1_max_pct=5 master.over2_max_pct=1`; `music.delimit.depth=2` |
 | Pumping, breathing | De-limiting too deep, or drum shaving too hard | `music.delimit.depth=1.5`; `music.dynamics.drum_ceiling_over_lufs=13` (limited sources; open ones already use 15) |
 | Too quiet compared with other music | Perceptual target too strict for their use | Limited source: `master.over1_max_pct=12 master.over2_max_pct=2.5`. Open source: `master.over1_max_pct=5 master.over2_max_pct=1` (costs some dynamics) |
@@ -25,6 +28,7 @@ python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.
 | Too wide, unnatural | Width step | `music.widen.side_db=1.5`; or `music.widen.enabled=false` |
 | Still phasey | An anti-phase stem not flagged | `music.antiphase.stems='["other","vocals"]'` |
 | Vocal too loud or too quiet | Stem balance | `music.balance.fraction=0.3`, or edit the stem gains by profile |
+| Vocal dull next to the album | The studio vocal is brighter at 1-8 kHz | `music.stem_match.vocal_presence_db=8` (the boost still follows how much of the band the vocal owns) |
 | Too processed, I want it natural | Strong-remaster defaults | `music.match.alpha=0.5 music.stem_match.enabled=false music.balance.enabled=false music.widen.enabled=false music.delimit.depth=1.5` |
 | Watery or swirly artefacts on the voice or cymbals | Separation bleed exposed by big stem changes | `music.stem_match.alpha=0.4 music.balance.limit_db=1.5`; or `music.stem_match.enabled=false` |
 | Sounds like a different band | Wrong reference | Build a profile from this artist |

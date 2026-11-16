@@ -136,3 +136,33 @@ The same audience recording was restored twice with this skill: once by Claude, 
     - A room-miked audience pair is wide by nature: its drums measured an L-R correlation of 0.65, its side only
       3.8 dB under mid. Adding width there costs mono compatibility and adds room.
     - Width is now added only to mixed images, with drums at a correlation of 0.8 or more.
+
+## Learned from comparing with the studio master of the same song
+
+31. **Right level, wrong texture.**
+    - What happened: the rebuilt top matched the studio master's level within 1 dB, and still sounded fake and
+      harsh to the listener.
+    - Measured on the same 30 s against the studio master, as spectral flatness:
+
+      | Band | Studio master | Restored |
+      |---|---|---|
+      | 13-19 kHz | 0.39 | 0.10 |
+      | 8-12.5 kHz | 0.42 | 0.15 |
+
+    - The cause: a low-bitrate codec leaves the band under its cut-off sparse and peaky. The tone match boosted it
+      and the band extension copied it up.
+    - Now: codec repair (Apollo) refills the band first, and half of the rebuilt top is a noise-like copy. That
+      brought the flatness to 0.29 and 0.31.
+32. **The artist's average is not this song.** The 27-song profile left 100-400 Hz 5-12 dB under the song's own
+    studio master, which has an unusually loud bass. The song's 30 s preview is now the recommended reference
+    (`--itunes-song`).
+33. **A room-miked vocal is as wide as the room.**
+    - What happened: the vocal stem of an audience recording had its side only 3 dB under mid. In the studio master,
+      it was 31 dB under.
+    - Tone matching cannot fix width. Per-stem width matching on room-miked images can: vocal, drums and bass
+      narrowed, guitars kept.
+34. **Separation limits how far a stem can be pushed.**
+    - The live vocal stem lacked 7-13 dB of the studio vocal's 2.5-6 kHz presence.
+    - Boosting that much would lift the cymbal bleed in the vocal stem too. The vocal's presence boost is capped at
+      +6 dB and scaled by how much of each band the vocal owns. The rest of the gap is information the recording
+      does not hold.

@@ -99,7 +99,8 @@ The **reference** decides what "good" means for the tone, so pick it deliberatel
 
 | Situation | Reference |
 |---|---|
-| The user has studio tracks of this artist | `profile --name X --files a.flac b.mp3 ...`: the best reference |
+| A single song, and its studio version exists | `profile --name X --itunes-artist "Artist" --itunes-song "Title" [--country jp]`, or `--files` with the track: **the best reference**, it is what "like the album" means. On an audience recording, it brought 100-400 Hz from 5-12 dB off to ±3 dB |
+| The user has studio tracks of this artist | `profile --name X --files a.flac b.mp3 ...` |
 | Online, artist known | `profile --name X --itunes-artist "Artist" [--country jp]`: official 30 s previews, about 1 min per 3 clips |
 | Neither | Bundled `jrock_band` (guitar band, loud modern master). For other genres, build a profile from any representative studio tracks the user can supply |
 | Speech | Bundled `speech_ltass` (long-term average speech spectrum), used automatically |
@@ -117,6 +118,7 @@ python3 scripts/audiofix.py check
 | De-limiter | Over-limited music gets stronger drum-transient shaping instead of neural de-limiting |
 | faster-whisper | The MC talker is located by voicing instead of word timings (about 80 % accurate against word timings); `verify` loses the intelligibility check |
 | numba | Slower, vectorised approximations |
+| Apollo (codec repair) | On low-bitrate rips (codec wall below 16 kHz), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It is slow on CPU, about 6x real time, so for long concerts you may choose `--codec-repair off` on purpose |
 
 `setup.sh` installs all of them. On a machine without internet, see `references/other-ai.md`.
 
@@ -240,16 +242,18 @@ Map what the user says to a knob, change one thing at a time, re-render and send
 
 **Music** (`references/music-path.md`):
 
-1. Repairs on the raw mix: 20 Hz high-pass, dehum, declip.
+1. Repairs on the raw mix: 20 Hz high-pass, dehum, declip. On low-bitrate rips, codec repair (Apollo) first
+   refills the sparse band under the cut-off.
 2. De-limit (limited sources): the network's gain curve at 1.5-2x depth, on every stem.
 3. Polarity repair of anti-phase stems: whole reversed layers, or anti-phase in some bands only.
+   On room-miked images, vocals, drums and bass are narrowed toward the studio stems' width.
 4. De-ess the vocal; lift drum transients; widen the guitar/keys layer (mixed images only).
 5. Per-stem tone match, 60 % toward the reference stems, per section.
 6. Stem balance, halfway to the reference ratios.
 7. Shave drum peaks on the drum stem; compress bass, vocal and guitars separately; bus glue. Firm on limited
    sources, light on open ones.
 8. Overall tone match, 85 %, per section.
-9. Band extension above the codec cut-off.
+9. Band extension above the codec cut-off, half of it noise-like so the rebuilt air is dense, not metallic.
 10. Bass below 100 Hz to mono.
 11. Open recordings: the original's loudness contour put back, so quiet parts stay quiet.
 12. Perceptual loudness and a true-peak limiter at -1 dBTP: as loud as a modern master for limited sources; for

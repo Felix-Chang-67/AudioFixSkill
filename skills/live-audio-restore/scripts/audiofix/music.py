@@ -31,7 +31,7 @@ def _sel(arr, a, b, mask):
     return seg[m] if m.sum() > 5 * SR else seg
 
 
-def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low):
+def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low, presence_db=None):
     f, P = dsp.psd(stem_sec)
     _, Mx = dsp.psd(mix_sec)
     Bs, Bm = dsp.bands(f, P), dsp.bands(f, Mx)
@@ -43,7 +43,10 @@ def _stem_curve(stem_sec, mix_sec, ref_shape, core, p, keep_low):
     conf = np.clip((Bs / (Bm + 1e-30) - 0.05) / 0.25, 0, 1)          # boost only where the stem is really present
     g = d * p["alpha"]
     g = np.where(g > 0, g * conf, g)
-    g = np.clip(g, p["lo_db"], np.where(CENT < 150, p["hi_low_db"], p["hi_db"]))
+    hi = np.where(CENT < 150, p["hi_low_db"], p["hi_db"])
+    if presence_db:                                   # the vocal's presence band may move further (studio vocals)
+        hi = np.where((CENT >= 1000) & (CENT <= 8000), np.maximum(hi, presence_db), hi)
+    g = np.clip(g, p["lo_db"], hi)
     g[CENT < 40] = np.minimum(g[CENT < 40], 0)
     if keep_low:
         g[CENT < 120] = np.maximum(g[CENT < 120], 0)
@@ -123,6 +126,23 @@ def run(x, st, plan, music_mask, work, log=print):
             if s in st:
                 st[s], a = dsp.fix_antiphase(st[s])
                 log(f"[music] polarity repair on {s}: {a['treated_pct']:.0f} % of its energy")
+        # 2b. room-miked images: each stem's width toward the reference stem's (vocal and drums back to the centre)
+        wm = M.get("width_match", {})
+        if wm.get("enabled"):
+            sel = music_mask[:n]
+            for s, tgt in (wm.get("targets") or {}).items():
+                if tgt is None or s not in st:
+                    continue
+                mid = (st[s][:, 0] + st[s][:, 1]) / 2
+                side = (st[s][:, 0] - st[s][:, 1]) / 2
+                cur = 10 * np.log10(np.mean(side[sel].astype(np.float64) ** 2) /
+                                    (np.mean(mid[sel].astype(np.float64) ** 2) + 1e-30) + 1e-12)
+                if cur > tgt:
+                    g = float(undb(max(tgt - cur, -wm.get("max_cut_db", 20.0))))
+                    side = side * g
+                    st[s] = np.stack([mid + side, mid - side], axis=1).astype(np.float32)
+                    log(f"[music] width {s}: side {cur:+.1f} -> {cur + 20 * np.log10(g):+.1f} dB re mid "
+                        f"(reference {tgt:+.1f})")
         # 3. de-ess, transients, width
         if M["deess"]["enabled"]:
             st["vocals"], a = dsp.deess(st["vocals"], pct=M["deess"]["pct"], max_cut=M["deess"]["max_cut_db"])
@@ -137,9 +157,10 @@ def run(x, st, plan, music_mask, work, log=print):
             mix = sum(st.values()) + res
             for s in st:
                 core = profiles.CORE[s]
+                pres = M["stem_match"].get("vocal_presence_db") if s == "vocals" else None
                 curves = [_stem_curve(_sel(st[s], a, b, music_mask), _sel(mix, a, b, music_mask),
                                       np.asarray(prof["stems"][s]["shape"]), core, M["stem_match"],
-                                      s in ("bass", "drums")) for a, b in secs]
+                                      s in ("bass", "drums"), pres) for a, b in secs]
                 st[s] = dsp.apply_sectioned(st[s], [dsp.fir_from_curve(c) for c in curves], W)
                 for (a, b), c in zip(secs, curves):
                     log(f"[music] stem EQ {s:6s} {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
@@ -195,7 +216,7 @@ def run(x, st, plan, music_mask, work, log=print):
         tgt = profiles.hf_target(prof, lo, hi)
         if tgt is None:                                   # no profile data: continue the slope of the top octave
             tgt = dsp.band_rel(y, be["cutoff_hz"] - 2500, be["cutoff_hz"] - 300) - 6.0
-        y, a = dsp.hf_extend(y, be["cutoff_hz"], tgt - be.get("below_ref_db", 0.0))
+        y, a = dsp.hf_extend(y, be["cutoff_hz"], tgt - be.get("below_ref_db", 0.0), noise_mix=be.get("noise_mix", 0.0))
         log(f"[music] band extension above {be['cutoff_hz']} Hz: {a}")
     # 9. bass to mono
     if M.get("mono_bass_hz"):

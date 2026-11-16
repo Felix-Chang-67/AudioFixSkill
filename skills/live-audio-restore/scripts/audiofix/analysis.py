@@ -22,8 +22,9 @@ def mask_of(n, regs):
 
 
 def capabilities():
+    from . import codec
     return {"ffmpeg": audio_io.have_ffmpeg(), "stems": S.available(), "delimiter": delimit.available(),
-            "numba": dsp.HAVE_NUMBA, "asr": measure.asr_available()}
+            "numba": dsp.HAVE_NUMBA, "asr": measure.asr_available(), "codec_repair": codec.available()}
 
 
 def cat_frames(act, regs, hop):
@@ -32,7 +33,7 @@ def cat_frames(act, regs, hop):
 
 
 def run(input_path, work, content="auto", music_profile="jrock_band", speech_profile="speech_ltass",
-        use_stems=True, log=print):
+        use_stems=True, log=print, codec_repair="auto"):
     os.makedirs(work, exist_ok=True)
     t0 = time.time()
     cap = capabilities()
@@ -55,6 +56,31 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
     D["noise"] = measure.noise_floor(x)
     D["stereo"] = measure.stereo(x)
     log(f"[analyze] global: {D['loudness']}, cutoff {D['bandwidth']['cutoff_hz']} Hz, stereo {D['stereo'].get('kind')}")
+
+    # codec repair (Apollo): a low-pass below 16 kHz means a low-bitrate codec, whose sparse, peaky top would sound
+    # fake once boosted or shifted. Everything after this (stems, measurements, rendering) uses the repaired signal;
+    # the cut-off and the global numbers above stay those of the original, and verify compares with the original.
+    bw = D["bandwidth"]
+    wall = bool(bw["brick_wall"] and bw["cutoff_hz"] < 16000)
+    want = codec_repair == "on" or (codec_repair == "auto" and wall)
+    D["codec_repair"] = {"applied": False, "requested": codec_repair, "codec_wall": wall,
+                         "why": (f"cut-off {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB wall"
+                                 + (": low-bitrate codec, its top is sparse" if wall else ": no low-bitrate codec wall"))}
+    if want and cap["codec_repair"]:
+        from . import codec
+        cached = os.path.join(work, "input_repaired.wav")
+        if os.path.exists(cached):
+            xr = audio_io.load(cached)[:n]
+        else:
+            log(f"[analyze] codec repair with Apollo (about {6 * n / SR / 60:.0f} min on CPU) ...")
+            t1 = time.time()
+            xr = codec.repair(x, log=log)
+            audio_io.save_wav(cached, xr, bits=32)
+            D["codec_repair"]["seconds"] = round(time.time() - t1)
+        D["codec_repair"].update(applied=True, model="apollo")
+        x, wav = xr, cached
+    elif want:
+        D["codec_repair"]["why"] += "; Apollo is not installed (bash scripts/setup.sh), the band is used as it is"
 
     st = None
     if use_stems and cap["stems"]:

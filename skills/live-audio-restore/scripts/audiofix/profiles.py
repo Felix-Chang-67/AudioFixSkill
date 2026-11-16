@@ -53,7 +53,8 @@ def save(prof, path):
     out = dict(prof)
     out["ltas"] = [round(float(v), 3) for v in prof["ltas"]]
     if prof.get("stems"):
-        out["stems"] = {k: {"shape": [round(float(x), 3) for x in v["shape"]], "ratio_db": round(v["ratio_db"], 2)}
+        out["stems"] = {k: {"shape": [round(float(x), 3) for x in v["shape"]], "ratio_db": round(v["ratio_db"], 2),
+                            **({"side_minus_mid_db": v["side_minus_mid_db"]} if "side_minus_mid_db" in v else {})}
                         for k, v in prof["stems"].items()}
     out["cent"] = [round(float(c), 2) for c in CENT]
     with open(path, "w") as fh:
@@ -66,6 +67,7 @@ def build(files, name, kind="music", work=None, with_stems=True, source=""):
     lt, hf, lu, plr = [], [], [], []
     shapes = {s: [] for s in S.STEMS}
     ratios = {s: [] for s in S.STEMS}
+    widths = {s: [] for s in S.STEMS}
     use_stems = with_stems and kind == "music" and S.available()
     for p in files:
         y = audio_io.load(p)
@@ -83,6 +85,7 @@ def build(files, name, kind="music", work=None, with_stems=True, source=""):
             for s in S.STEMS:
                 shapes[s].append(stem_shape(st[s], s))
                 ratios[s].append(10 * np.log10(np.mean(st[s].astype(np.float64) ** 2) / pm + 1e-30))
+                widths[s].append(side_minus_mid(st[s]))
     if not lt:
         raise SystemExit("no usable reference audio (need at least 5 s per file)")
     prof = {"name": name, "kind": kind, "source": source, "count": len(lt),
@@ -90,15 +93,25 @@ def build(files, name, kind="music", work=None, with_stems=True, source=""):
             "hf_rel_db": {b: round(float(np.median([h[b] for h in hf])), 2) for b in hf[0]},
             "loudness": {"lufs_median": round(float(np.median(lu)), 1), "plr_median": round(float(np.median(plr)), 1)}}
     if use_stems and shapes["vocals"]:
-        prof["stems"] = {s: {"shape": np.median(np.array(shapes[s]), axis=0), "ratio_db": float(np.median(ratios[s]))}
+        prof["stems"] = {s: {"shape": np.median(np.array(shapes[s]), axis=0), "ratio_db": float(np.median(ratios[s])),
+                             "side_minus_mid_db": round(float(np.median(widths[s])), 1)}
                          for s in S.STEMS}
     return prof
 
 
-def fetch_itunes(artist, out_dir, limit=30, country="us"):
-    """Download official 30 s preview clips of an artist from the public iTunes Search API (tonal reference only)."""
+def side_minus_mid(y):
+    """Stereo width of a signal: side power re mid power, dB (-inf = mono)."""
+    mid = (y[:, 0].astype(np.float64) + y[:, 1]) / 2
+    side = (y[:, 0].astype(np.float64) - y[:, 1]) / 2
+    return float(10 * np.log10(np.mean(side ** 2) / (np.mean(mid ** 2) + 1e-30) + 1e-12))
+
+
+def fetch_itunes(artist, out_dir, limit=30, country="us", song=None):
+    """Download official 30 s preview clips of an artist from the public iTunes Search API (tonal reference only).
+    song: keep only tracks whose title contains it - the studio version of the very song is the best target."""
     os.makedirs(out_dir, exist_ok=True)
-    q = urllib.parse.urlencode({"term": artist, "entity": "song", "limit": 200, "country": country})
+    q = urllib.parse.urlencode({"term": f"{artist} {song}" if song else artist, "entity": "song", "limit": 200,
+                               "country": country})
     data = json.load(urllib.request.urlopen(f"https://itunes.apple.com/search?{q}", timeout=30))
     res = [t for t in data.get("results", []) if t.get("previewUrl")]
     match = [t for t in res if artist.lower() in (t.get("artistName") or "").lower()]
@@ -106,6 +119,10 @@ def fetch_itunes(artist, out_dir, limit=30, country="us"):
         from collections import Counter
         top = Counter(t["artistId"] for t in res[:25]).most_common(1)[0][0]
         match = [t for t in res if t["artistId"] == top]
+    if song:
+        match = [t for t in match if song.lower() in (t.get("trackName") or "").lower()]
+        if not match:
+            raise SystemExit(f"iTunes: no preview of '{song}' by '{artist}' found (try another --country)")
     if match:
         print(f"iTunes: using previews of '{match[0].get('artistName')}' (artist id {match[0].get('artistId')})")
     got = []

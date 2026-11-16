@@ -80,6 +80,7 @@ bash scripts/setup.sh          # 装好缺的东西，最后自动运行 check
   | demucs + PyTorch | 音轨分离，分成人声/鼓/贝斯/其他 |
   | De-limiter | 神经网络去压限 |
   | faster-whisper | 用词级时间戳定位 MC 讲话，并做可懂度检查 |
+  | Apollo（可选） | 修复低码率编码造成的高频损伤，让高频不再发假发刺。CPU 上约为音频时长的 6 倍，5 分钟的歌约半小时 |
 
 - **缺组件时**：缺哪个就自动降级。`python3 scripts/audiofix.py check` 会告诉你少了什么、会影响什么。
 - **测试环境**：Python 3.13、torch 2.15、demucs 4.1.0、faster-whisper 1.2.1、numpy 2.5、scipy 1.18、ffmpeg 6.1。
@@ -113,15 +114,19 @@ python3 scripts/audiofix.py restore --work out                  # 修复 + 验�
 python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3   # 改一个参数重渲染
 ```
 
-**音色参考决定什么叫"好"。** 内置的 `jrock_band` 是吉他乐队、现代响度母带的统计数据。其他风格或别的艺人，建议自己建参考：
+**音色参考决定什么叫"好"。** 内置的 `jrock_band` 是吉他乐队、现代响度母带的统计数据。想要"像专辑"，最好的参考是这首歌自己的录音室版；其次是同一艺人的录音室音轨：
 
 ```bash
-# 用该艺人的录音室音轨（最好）
+# 这首歌自己的录音室版（最好）：iTunes 官方 30 秒试听，需要联网，只保存统计数据，不保存音频
+python3 scripts/audiofix.py profile --name mysong --itunes-artist "艺人名" --itunes-song "歌名" --country jp --out mysong.json
+# 该艺人的录音室音轨
 python3 scripts/audiofix.py profile --name myband --files a.flac b.mp3 c.m4a --out myband.json
-# 或者用 iTunes 官方 30 秒试听片段（需要联网，只保存统计数据，不保存音频）
+# 或者该艺人的多首试听片段
 python3 scripts/audiofix.py profile --name myband --itunes-artist "艺人名" --country jp --out myband.json
-python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile myband.json
+python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile mysong.json
 ```
+
+在一份观众席录音上，用 27 首歌的平均做参考时，100–400 Hz 比这首歌的录音室版少 5–12 dB；换成这首歌自己的试听片段，差距缩小到 ±3 dB 以内。
 
 ---
 
@@ -146,6 +151,7 @@ python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile myb
 | 平顶连续段 | ≥ 20 次/分钟 | 削波，炸音 | 去削波 |
 | 50/60 Hz 及谐波高出频谱 | 基波 ≥ 10 dB，或两个谐波 ≥ 8 dB | 嗡嗡声 | 陷波去哼声 |
 | 截止频率处的陡降 | > 25 dB 且截止 < 18.5 kHz | 发闷，没有空气感 | 高频重建 |
+| 截止频率以下的高频质感（频谱平坦度） | 截止 < 16 kHz 的低码率编码：高频稀疏、一根根的 | 高频发假、发刺、像金属 | 先用 Apollo 修复质感，再重建高频，其中一半换成同包络的噪声质感 |
 
 ### 音乐路径
 
@@ -154,6 +160,7 @@ python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile myb
 | 响度范围 LRA、峰值/响度比 PLR | LRA < 4 LU 或 PLR < 11 dB 为被压限过；LRA < 2 或 PLR < 9.5 为重度 | 糊、累耳朵、鼓没冲击力 | 被压限过：神经网络去压限（深度 1.5 或 2 倍）、分轨控峰、母带做响。**没被压限过（动态正常）**：轻压缩、按原版还原整首起伏、限幅器几乎不工作，保住现场的动态 |
 | 每个分离音轨的反相：① 4 秒窗口 L/R 相关性 < -0.3 的能量占比；② 修复器检测到的相干反相能量 + 单声道损失 | ① ≥ 10 %（整层反相），或 ② ≥ 5 % 且单声道损失超过 1 dB（只有部分频段反相） | 相位怪，手机外放少了乐器 | 只旋转相干反相的频点，不整轨翻转 |
 | 鼓轨的左右声道相关性 | ≥ 0.8 是混音过的画面；< 0.8 是房间拾音，本身已经很宽 | 太宽、发散 | 只给混音过的画面加宽 |
+| 各轨的声场宽度（侧声比中声） | 房间拾音时人声、鼓、贝斯会像房间一样宽 | 不聚焦、不纯净、人声发飘 | 人声、鼓、贝斯收窄到录音室版对应轨的宽度（最多收 20 dB），吉他保持宽 |
 | 人声占 3–10 kHz 能量的比例，5–8 kHz 与参考的偏差 | ≥ 50 % 或 > +4 dB 时去齿音最多 9 dB，否则 6 dB | 齿音、刺耳 | 去齿音 |
 | 长期频谱与参考的偏差（逐频带） | 越大越需要校正 | 闷、浑、薄、刺 | 分轨音色匹配 60 %，整体匹配 85 % |
 | 各音轨相对整体的电平与参考比 | 差异大就调 | 人声太前/太后、贝斯太弱 | 向参考比例移动一半，最多 ±3 dB |
@@ -180,9 +187,10 @@ python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile myb
 
 ### 音乐路径
 
-1. **基础修复**：20 Hz 高通、去哼声、去削波。
+1. **基础修复**：20 Hz 高通、去哼声、去削波。低码率素材先用 Apollo 修复被编码器弄稀疏的高频质感。
 2. **神经网络去压限**（只用于被压限过的素材）：用 De-limiter 的增益曲线，按 1.5–2 倍深度作用在每个音轨上。
 3. **反相修复**：整层反相的音轨、只有部分频段反相的音轨都修，只旋转相干反相的频点。
+   - 房间拾音的录音还会做声场匹配：人声、鼓、贝斯收窄到录音室版对应轨的宽度。
 4. **分轨处理**：人声去齿音，鼓的瞬态恢复，吉他/键盘层加宽（只用于混音过的立体声画面）。
 5. **分轨音色匹配**：每个音轨向参考里的同一音轨移动 60 %，按分区进行。
 6. **音轨平衡**：向参考比例移动一半。
@@ -190,7 +198,7 @@ python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile myb
    - 被压限过的素材处理得较重，这样主限幅器不会带着整个混音"抽吸"。
    - 动态正常的素材处理得很轻：鼓峰只在鼓轨响度之上 15 dB 处才削，压缩比 2:1 / 1.5:1，不做总线粘合。
 8. **整体音色匹配**：85 %，8191 抽头线性相位 FIR。
-9. **高频重建**：在编码器截止频率以上，用单边带频移从下方频段重建，并校准到参考的高频斜率。
+9. **高频重建**：在编码器截止频率以上，用单边带频移从下方频段重建，其中一半换成同包络的噪声质感（真实的空气感是细密的，不是稀疏的金属声），并校准到参考的高频斜率。
 10. **低频单声道化**：100 Hz 以下合成单声道。
 11. **还原整首起伏**（只用于动态正常的素材）：处理完以后，把原版每 3 秒的响度轮廓放回去，安静的前奏、间奏保持安静。
 12. **感知响度母带**：找到限幅器超过 1 dB 和 2 dB 的时间都不超标的最响电平，真峰值 -1 dBTP。
@@ -279,6 +287,7 @@ skills/live-audio-restore/
 | De-limiter | Jeon & Lee, WASPAA 2023 | MIT |
 | faster-whisper / Whisper | SYSTRAN / OpenAI | MIT |
 | asteroid | — | MIT |
+| Apollo | Li et al.（JusperLee/Apollo） | CC BY-SA 4.0，由 setup.sh 下载，不包含在本仓库里 |
 
 其他：
 

@@ -19,6 +19,14 @@ if [ ! -f "$DL/weight/all.pth" ]; then
   git clone --depth 1 https://github.com/jeonchangbin49/De-limiter "$DL" || echo "!! could not clone De-limiter"
 fi
 
+echo "== codec repair for low-bitrate rips (Apollo, CC BY-SA 4.0; its checkpoint downloads on first use)"
+$PY -m pip install --quiet huggingface_hub || true
+AP="${AUDIOFIX_APOLLO:-$HOME/.cache/audiofix/Apollo}"
+if [ ! -f "$AP/look2hear/models/apollo.py" ]; then
+  mkdir -p "$(dirname "$AP")"
+  git clone --depth 1 https://github.com/JusperLee/Apollo "$AP" || echo "!! could not clone Apollo: codec repair off"
+fi
+
 echo "== speech recognition for MC talker timing and the intelligibility check (faster-whisper)"
 $PY -m pip install --quiet faster-whisper || echo "!! faster-whisper failed: MCs fall back to the voicing detector"
 

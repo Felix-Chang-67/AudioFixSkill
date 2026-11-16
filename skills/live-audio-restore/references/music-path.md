@@ -10,7 +10,40 @@ same pipeline: the long-term spectra of the two agreed within 0.13 dB RMS.
 - **Dynamics:** it depends on the source. A limited one is opened up and mastered loud. An open one keeps its own
   dynamics (steps 6 and 10, and the master).
 
-## 0. Separation
+## 0a. Codec repair (`repair.codec`, Apollo; runs during `analyze`)
+
+**Why.** A low-bitrate AAC or MP3 does more than cut the top. Below its cut-off it zeroes whole time-frequency tiles,
+so the remaining band is sparse and peaky: "birdies" and holes. Two later steps make that audible:
+
+- The tone match lifts this band toward the reference.
+- The band extension copies it upward.
+
+At the right level but with the wrong texture, the highs sound fake and harsh. On an audience recording, the 8-12.5
+kHz band had a spectral flatness of 0.08, against 0.42 for the studio master of the same song (1 = noise-like, 0 =
+sparse tones).
+
+**How.** Apollo (Li et al., a network trained to restore lossy-coded music) refills that texture before
+separation:
+
+| Band | Before | After Apollo | Studio master |
+|---|---|---|---|
+| 8-12.5 kHz | 0.08 | 0.26 | 0.42 |
+| 4-8 kHz | 0.19 | 0.28 | 0.45 |
+
+The tone is otherwise unchanged. Its own extension above the cut-off is weak (27 dB under the studio level), so the
+band extension (step 8) still runs. It now works from a natural band.
+
+**When.** `--codec-repair auto` (the default) runs it when a codec wall below 16 kHz is found and Apollo is
+installed. Everything after it uses `input_repaired.wav`. The cut-off and the global numbers stay those of the
+original, and `verify` compares with the original.
+
+**Cost.** About 6x real time on CPU: a 5 min song takes about 30 min. For long concerts, use `--codec-repair off`,
+or run it overnight.
+
+**Safety.** The checkpoint is loaded with torch's restricted unpickler and an allowlist of the plain classes it
+references. The omegaconf classes are stand-ins, so nothing in the file can run code.
+
+## 0b. Separation
 
 The input goes through demucs `htdemucs` into four stems: vocals, drums, bass and other (guitars, keys, crowd).
 
@@ -82,6 +115,38 @@ The result is still wide (correlation 0.74), not mono.
 Drum and bass stems measured 0-0.1 % on every recording. Because only coherent anti-phase bins are rotated, a
 repaired stem with little anti-phase barely changes: everything in phase or merely decorrelated is left as it was.
 
+## 2b. Width per stem (`width_match`, room-miked images)
+
+**Why.** In a studio master the vocal, kick, snare and bass sit in the middle; only guitars and keys are spread.
+Here is the side level re mid of each stem in the studio master of one song, and in an audience recording of it:
+
+| Stem | Studio master | Audience recording |
+|---|---|---|
+| Vocals | -31 dB | -3 dB |
+| Drums | -23 dB | -7.5 dB |
+| Bass | -57 dB | -16 dB |
+| Guitars/keys ("other") | +0.2 dB | -3 dB |
+
+The extra width of the vocal and drums is the room: reflections that reach the two mics differently. It reads as
+diffuse, unfocused and impure, and it costs mono compatibility.
+
+**How.** Only on room-miked images (drum stem's median L-R correlation below 0.8):
+
+1. Each of vocals, drums and bass has its side signal scaled down toward the reference stem's side level. The target
+   comes from the profile if it holds widths, otherwise vocals -30, drums -22, bass -40 dB.
+2. The cut is at most 20 dB. Only narrowing, never widening.
+3. Guitars and keys keep their width.
+
+**Effect** on the audience recording:
+
+| Measure | Before | After | Studio |
+|---|---|---|---|
+| Mix side re mid | -6.9 dB | -11.8 dB | -12.8 dB |
+| Mono loss | -0.94 dB | -0.32 dB | -0.28 dB |
+| Vocal stem side re mid | -3.4 dB | -25 dB | — |
+
+The vocal stem's 2-8 kHz texture also moved toward the studio vocal's.
+
 ## 3. De-ess (`deess`), drum transients (`transients`), width (`widen`)
 
 **De-ess.** A dynamic de-esser on the vocal stem, working in the 4.5-11 kHz band.
@@ -130,7 +195,7 @@ guitars. Each instrument is compared with the same instrument in the reference.
 2. Compare it with the reference stem shape, smooth over half an octave, and take `alpha` = 60 %.
 3. Boost only where the stem carries a real share of that band: no boost below a 5 % share, full boost above 30 %.
    Lifting another instrument's bleed would be wrong.
-4. Caps: +3 dB (+4 dB below 150 Hz) and -6 dB. Bass and kick are never cut below 120 Hz.
+4. Caps: +3 dB (+4 dB below 150 Hz) and -6 dB. The vocal's 1-8 kHz presence may rise +6 dB, because a studio vocal is far brighter there than a live one, but that boost is still scaled by how much of the band the vocal owns. Bass and kick are never cut below 120 Hz.
 5. Render each section's curve as an 8191-tap linear-phase FIR; sections crossfade over 1.5 s.
 
 **Why core-band normalisation.** An earlier version normalised to the stem's total energy. A very bright live vocal
@@ -139,8 +204,14 @@ same deviation into a cut of the harsh top.
 
 ## 5. Stem balance (`balance`)
 
-Each stem's share of the mix moves `fraction` = 50 % toward the reference share, at most ±3 dB, per section, with
-crossfaded gains.
+Each stem's share of the mix moves toward the reference share, per section, with crossfaded gains:
+
+| Image | `fraction` | `limit_db` |
+|---|---|---|
+| Mixed (board or broadcast) | 50 % | ±3 dB |
+| Room-miked | 75 % | ±6 dB |
+
+A room-miked recording is far from the bass amp and close to the crowd. On one, the bass stem sat 20 dB under its studio share and "other" (guitars plus room and crowd) 6 dB over. Letting the balance move further gives a defined bass instead of room boom.
 
 Example: a broadcast had the bass 6-8 dB under its studio share and got +2.8 / +3 dB. In its second half, the
 guitar layer was 3.5 dB over the vocal; the guitars got -2.9 dB and the vocal +2 dB.
@@ -190,14 +261,25 @@ headphones.
    stay aligned with their hits.
 3. Repeat until about 19.5 kHz.
 4. High-pass at the cut-off and roll off from 17.5 kHz.
-5. Scale it so that [fc + 300, fc + 2500] matches the reference profile's power in that band (`below_ref_db`
+5. Replace half of its power (`noise_mix` 0.5) with a noise-like copy that has the same envelope: STFT magnitude
+   smoothed over about 400 Hz, random phase shared by both channels, so panning and timing stay.
+6. Scale it so that [fc + 300, fc + 2500] matches the reference profile's power in that band (`below_ref_db`
    offsets it). Without profile data, it continues the slope of the octave below at -6 dB.
 
-**Limits.** This is synthetic "air" built from the band below. It is not the original recording's top.
+**Why the noise-like half.** A shifted band keeps the sparse, peaky texture of what it was shifted from. Real air,
+from cymbals and breath, is dense. On the audience recording, the 13-19 kHz flatness was:
 
-- The codec's holes in the source band are copied up with it. You can see them in the spectrogram; they are hard to
-  hear at those levels.
-- Keep it at or below the reference level.
+| Rebuilt top | Flatness |
+|---|---|
+| Shifted copy of the raw codec band | 0.10 |
+| Shifted copy after codec repair | 0.24 |
+| After codec repair, with the noise-like half | 0.31 |
+| Studio master, for comparison | 0.39 |
+
+The level matched the studio master within 1 dB in all three.
+
+**Limits.** This is synthetic "air" built from the band below. It is not the original recording's top. Keep it at or
+below the reference level.
 
 ## 9. Bass to mono
 

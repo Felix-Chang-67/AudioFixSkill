@@ -338,10 +338,29 @@ def fix_antiphase(y, block_s=60.0, overlap_s=4.0):
 
 
 # ------------------------------------------------------------------ band extension
-def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None):
+def noise_like(sig, nper=1024, smooth_bins=9, seed=1234):
+    """Same time-frequency envelope as sig, noise-like fine structure: STFT magnitude smoothed over frequency, random
+    phase shared by both channels (so the panning stays). A shifted codec band is sparse and peaky ("metallic");
+    real air from cymbals and breath is dense and noise-like."""
+    rng = np.random.default_rng(seed)
+    out = np.empty_like(sig)
+    ph = None
+    for c in range(sig.shape[1]):
+        f, t, Z = stft(sig[:, c], SR, nperseg=nper, noverlap=nper * 3 // 4)
+        if ph is None:
+            ph = np.exp(2j * np.pi * rng.random(Z.shape))
+        mag = uniform_filter1d(np.abs(Z), smooth_bins, axis=0)
+        _, z = istft(mag * ph, SR, nperseg=nper, noverlap=nper * 3 // 4)
+        z = z[:len(sig)]
+        out[:, c] = np.pad(z, (0, len(sig) - len(z))) if len(z) < len(sig) else z
+    return out
+
+
+def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None, noise_mix=0.0):
     """SBR-style extension above a codec cut-off: the band just below the cut-off is shifted up
     (single-sideband, so hats, cymbals and sibilants keep their timing), repeated until ~top, then set so that
-    the band right above the cut-off sits at target_rel_db (power re 0.5-2 kHz). mask: samples to calibrate on."""
+    the band right above the cut-off sits at target_rel_db (power re 0.5-2 kHz). mask: samples to calibrate on.
+    noise_mix: share of the extension's power replaced by a noise-like copy with the same envelope (0..1)."""
     from scipy.fft import next_fast_len
     from scipy.signal import hilbert
     n = len(y)
@@ -365,6 +384,10 @@ def hf_extend(y, cutoff, target_rel_db, top=19500.0, rolloff=17500.0, mask=None)
         return y, {"gain_db": None}
     if rolloff and rolloff > cutoff:
         ext = lowpass(ext, rolloff, order=2)
+    if noise_mix > 0:
+        nz = highpass(noise_like(ext), cutoff - 100, order=8)
+        p_e, p_n = float(np.mean(ext.astype(np.float64) ** 2)), float(np.mean(nz.astype(np.float64) ** 2)) + 1e-30
+        ext = (np.sqrt(1 - noise_mix) * ext + np.sqrt(noise_mix * p_e / p_n) * nz).astype(np.float32)
     lo, hi = cutoff + 300, min(cutoff + 2500, 18000)
     have = band_rel(ext, lo, hi, ref_to=y) if mask is None else band_rel(ext[mask], lo, hi, ref_to=y[mask])
     g = float(10 ** ((target_rel_db - have) / 20))

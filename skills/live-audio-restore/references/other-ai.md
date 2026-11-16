@@ -47,6 +47,15 @@ torch/demucs/numba.
    Without stems there is no per-instrument work. Speech uses the voicing detector and the whole mix. Expect a
    clearly smaller improvement than the full pipeline: run the full version locally when you can.
 
+   Codec repair (Apollo) is missing there too. On low-bitrate rips, the rebuilt highs then keep the codec's sparse,
+   metallic texture. The noise-like half of the band extension softens this, but cannot replace the repair.
+
+## Long jobs
+
+Codec repair runs at about 6x real time on CPU: a 5 min song takes about 30 min. Assistants with short tool
+time-outs should start `analyze` in the background, or ask the user to run it, and continue from the work folder.
+`input_repaired.wav` is cached, so a rerun does not repeat it.
+
 ## Chat-only assistants (no code execution)
 
 Run the tool yourself and let the assistant interpret:

@@ -150,17 +150,19 @@ phase by band), the 3-10 kHz share by stem, and the tone deviation against the m
 
 | Step | Switched on when | Strength / parameters |
 |---|---|---|
+| Codec repair (Apollo, during analyze) | Codec wall below 16 kHz and Apollo installed (`--codec-repair auto`) | Refills the sparse, peaky band under the cut-off (8-12.5 kHz flatness 0.08 → 0.26 on an audience rip; studio 0.42) before anything else. About 6x real time on CPU |
 | De-limit | LRA < 4 or PLR < 11, and the De-limiter is installed | Depth 2.0 if LRA < 2 or PLR < 9.5, else 1.5 |
 | Drum transients | Stems available | 0.35 / max 2.5 dB with de-limiting; 0.55 / 4.5 dB if limited but no de-limiter; 0.25 / 2 dB otherwise |
 | Polarity repair | A stem has 10 % or more of its energy in 4 s windows with L-R correlation below -0.3 (a whole layer reversed), **or** 5 % or more of its energy in coherent anti-phase bins together with a mono loss beyond -1 dB (anti-phase in some bands only) | Only that stem. Without stems, the mix when 10 % or more of mid-band windows are negative |
 | De-ess (vocal) | Vocal stem present | Max cut 9 dB if the vocal carries 50 % or more of the 3-10 kHz energy, or 5-8 kHz sits more than 4 dB above the profile; else 6 dB. Acts only on the brightest 20 % of moments |
 | Widen guitars/keys | Stereo source, stems, and the drum stem's median L-R correlation ≥ 0.8 (a mixed image) | Side +3 dB above 150 Hz. Never on mono or near-mono. Off on a diffuse, room-miked recording (drums below 0.8): it is already wide. An audience recording measured drums 0.65, vocal 0.32, side only 3.8 dB under mid; broadcast mixes measured 0.98-1.0 |
-| Per-stem tone match | Stems and a profile with stem statistics | 60 % toward the reference stem. Boosts at most +3 dB (+4 dB below 150 Hz), cuts at most -6 dB. Boost only where the stem carries at least 5-30 % of the band (no lifting of bleed). Bass and kick never cut below 120 Hz |
-| Stem balance | Same | Each stem halfway to its reference share of the mix, at most ±3 dB, per section |
+| Per-stem tone match | Stems and a profile with stem statistics | 60 % toward the reference stem. Boosts at most +3 dB (+4 dB below 150 Hz; the vocal's 1-8 kHz presence +6 dB), cuts at most -6 dB. Boost only where the stem carries at least 5-30 % of the band (no lifting of bleed). Bass and kick never cut below 120 Hz |
+| Width per stem | Room-miked image (drums' median L-R correlation < 0.8) and stems | Vocals, drums and bass narrowed toward the reference stems' side level (studio: vocals -31, drums -23, bass -57 dB re mid), at most 20 dB; guitars keep their width |
+| Stem balance | Same | Each stem toward its reference share of the mix, per section: 50 % and at most ±3 dB on mixed images, 75 % and at most ±6 dB on room-miked ones |
 | Stem dynamics | Stems | Limited source: drum peaks held at drum loudness +11 dB (1 ms lookahead); bass 3:1, vocal 3:1, guitars 2.5:1; bus 1.8:1. Open source: drums at +15 dB; bass 2:1, vocal 2:1, guitars 1.5:1; no bus glue |
 | Loudness contour | Open source (LRA ≥ 4 and PLR ≥ 11) | After all processing, the original's 3 s loudness contour is put back, as a slow gain within ±6 dB |
 | Overall tone match | Always (with a profile) | 85 % toward the profile, -8 to +6 dB, no boosts above the cut-off, per section |
-| Band extension | Brick wall below 18.5 kHz | SBR-style shift of the band below the cut-off, level set so the band above the cut-off matches the profile's top octave |
+| Band extension | Brick wall below 18.5 kHz | SBR-style shift of the band below the cut-off, half of it replaced by a noise-like copy with the same envelope (`noise_mix` 0.5); level set so the band above the cut-off matches the profile's top octave |
 | Bass to mono | Stereo | Below 100 Hz |
 | Loudness | Always | Loudest target where the limiter exceeds 1 dB at most 8 % of the time and 2 dB at most 1.5 % (limited source), or 2.5 % and 0.5 % (open source) |
 
@@ -201,6 +203,12 @@ Check the 3-10 kHz share before blaming cymbals. On the broadcast example, the v
 
 **Choosing the profile matters more than any knob.** Genre sets the target. A jazz club recording matched to a loud
 rock profile will be pushed toward rock. Build a profile from the artist or the genre whenever possible.
+
+Best of all is the studio version of the very song:
+`profile --itunes-artist ARTIST --itunes-song TITLE`, or `--files` with the track.
+
+On an audience recording, the artist's 27-song average left 100-400 Hz 5-12 dB under that song's own studio
+master. Songs differ: that one has a loud bass. Its own 30 s preview brought the section within ±3 dB.
 
 ## 5. Speech path: decisions
 

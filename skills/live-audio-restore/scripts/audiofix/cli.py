@@ -23,7 +23,9 @@ def cmd_check(a):
                "delimiter": "neural de-limiting: run scripts/setup.sh (clones De-limiter, installs asteroid deps)",
                "numba": "speed only: pip install numba (vectorised approximations are used without it)",
                "asr": "word-accurate MC talker timing and the intelligibility check: pip install faster-whisper "
-                      "(the model downloads on first use)"}
+                      "(the model downloads on first use)",
+               "codec_repair": "Apollo codec repair (natural highs on low-bitrate rips): run scripts/setup.sh "
+                               "(clones Apollo; the checkpoint downloads on first use)"}
     for k, ok in cap.items():
         print(f"{'ok ' if ok else 'MISSING'} {k}" + ("" if ok else f"  -> {missing.get(k, '')}"))
     print("profiles:", profiles.available_profiles())
@@ -35,8 +37,10 @@ def cmd_profile(a):
     files = list(a.files or [])
     src = a.source or ""
     if a.itunes_artist:
-        files += profiles.fetch_itunes(a.itunes_artist, os.path.join(work, "previews"), a.limit, a.country)
-        src = src or f"official iTunes preview clips of {a.itunes_artist} ({len(files)} clips)"
+        files += profiles.fetch_itunes(a.itunes_artist, os.path.join(work, "previews"), a.limit, a.country,
+                                        song=a.itunes_song)
+        src = src or (f"official iTunes preview of '{a.itunes_song}' by {a.itunes_artist} ({len(files)} clips)"
+                      if a.itunes_song else f"official iTunes preview clips of {a.itunes_artist} ({len(files)} clips)")
     if a.kind == "speech" and not files:
         prof = profiles.speech_ltass()
     else:
@@ -50,7 +54,8 @@ def _analyze(a, log):
         os.environ["AUDIOFIX_ASR_LANG"] = a.language
     if getattr(a, "asr_model", None):
         os.environ["AUDIOFIX_ASR_MODEL"] = a.asr_model
-    D = analysis.run(a.input, a.work, a.content, a.music_profile, a.speech_profile, not a.no_stems, log)
+    D = analysis.run(a.input, a.work, a.content, a.music_profile, a.speech_profile, not a.no_stems, log,
+                     codec_repair=getattr(a, "codec_repair", "auto"))
     P = PL.build(D)
     PL.save(P, os.path.join(a.work, "plan.json"))
     with open(os.path.join(a.work, "diagnosis.md"), "w") as fh:
@@ -124,6 +129,7 @@ def main(argv=None):
     p.add_argument("--kind", choices=["music", "speech"], default="music")
     p.add_argument("--files", nargs="*", help="reference recordings (studio tracks of the same artist/genre, clean speech)")
     p.add_argument("--itunes-artist", help="download official 30 s previews of this artist as references")
+    p.add_argument("--itunes-song", help="with --itunes-artist: only this song (its studio version is the best target)")
     p.add_argument("--limit", type=int, default=30)
     p.add_argument("--country", default="us")
     p.add_argument("--out", required=True, help="profile JSON path")
@@ -142,6 +148,9 @@ def main(argv=None):
         q.add_argument("--no-stems", action="store_true", help="skip stem separation (mix-only fallbacks)")
         q.add_argument("--language", help="spoken language for Whisper, e.g. ja, en, zh (default: detect)")
         q.add_argument("--asr-model", help="faster-whisper model: tiny, base, small (default), medium, large-v3")
+        q.add_argument("--codec-repair", choices=["auto", "on", "off"], default="auto",
+                       help="Apollo codec repair: auto = when a low-bitrate codec wall (< 16 kHz) is found; slow on "
+                            "CPU, about 6x real time")
 
     common(sub.add_parser("analyze", help="measure, detect content, write diagnosis.md and plan.json"))
     r = sub.add_parser("restore", help="render plan.json (or --plan) into restored.wav/m4a, then verify")

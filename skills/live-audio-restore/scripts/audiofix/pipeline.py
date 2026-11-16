@@ -25,7 +25,12 @@ def _repairs(x, R, log):
 def restore(work, plan, log=print):
     t0 = time.time()
     D = json.load(open(os.path.join(work, "diagnosis.json")))
-    x = audio_io.load(os.path.join(work, "input.wav"))
+    rep_wav = os.path.join(work, "input_repaired.wav")
+    use_rep = D.get("codec_repair", {}).get("applied") and plan["repair"].get("codec", {}).get("enabled", True) \
+        and os.path.exists(rep_wav)
+    x = audio_io.load(rep_wav if use_rep else os.path.join(work, "input.wav"))
+    if use_rep:
+        log("[repair] using the codec-repaired input (Apollo)")
     n = len(x)
     x = _repairs(x, plan["repair"], log)
     st = None

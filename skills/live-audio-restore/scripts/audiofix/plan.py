@@ -45,6 +45,11 @@ def build(D):
                    "why": f"{c['flat_runs_per_min']} flat-topped runs per minute at {c['peak_dbfs']} dBFS "
                           f"(rule: >= 20/min means digital clipping)" + ("" if cap["ffmpeg"] or not clipped
                                                                          else "; ffmpeg missing, cannot declip")}
+    cr = D.get("codec_repair", {})
+    R["codec"] = {"enabled": bool(cr.get("applied")),
+                  "why": (cr.get("why", "") + (": repaired with Apollo during analyze (input_repaired.wav); "
+                                               "set false to render from the original" if cr.get("applied") else ""))
+                  or "not measured"}
 
     # ---------------------------------------------------------------- music path
     mu = D.get("music")
@@ -102,14 +107,31 @@ def build(D):
         prof = profiles.load(D["profiles"]["music"])
         pst = bool(st) and bool(prof.get("stems"))
         M["stem_match"] = {"enabled": pst, "alpha": 0.6, "lo_db": -6.0, "hi_db": 3.0, "hi_low_db": 4.0,
+                           "vocal_presence_db": 6.0,
                            "why": "each stem 60 % toward the same stem of the reference (local fixes: harsh vocal, "
-                                  "cymbals, bleed); boosts capped, bass/kick never thinned below 120 Hz"
+                                  "cymbals, bleed); boosts capped (+3 dB, the vocal's 1-8 kHz presence +6 dB, always "
+                                  "scaled by how much the stem owns the band), bass/kick never thinned below 120 Hz"
                            if pst else "needs stems and a profile with stem statistics"}
+        # room-miked images: the stems' widths toward the reference stems' (studio vocals, bass and kick are mono)
+        WIDTH_DEFAULT = {"vocals": -30.0, "drums": -22.0, "bass": -40.0}
+        if st and diffuse and kind == "stereo":
+            targets = {s: (prof.get("stems", {}).get(s, {}).get("side_minus_mid_db", WIDTH_DEFAULT[s]))
+                       for s in WIDTH_DEFAULT}
+            M["width_match"] = {"enabled": True, "targets": targets, "max_cut_db": 20.0,
+                                "why": f"room-miked image (drums' median L-R correlation {drum_corr} < 0.8): the "
+                                       f"vocal, drum and bass stems carry the room's width. Each is narrowed toward "
+                                       f"the reference stem's side level re mid {targets} dB, at most 20 dB; the "
+                                       f"guitars/keys keep their width"}
+        else:
+            M["width_match"] = {"enabled": False, "why": "mixed (board or broadcast) image, or no stems: widths kept"}
         if pst:
             live = {k: v["level_re_mix_db"] for k, v in st.items()}
             ref = {k: round(v["ratio_db"], 1) for k, v in prof["stems"].items()}
-            M["balance"] = {"enabled": True, "fraction": 0.5, "limit_db": 3.0,
-                            "why": f"stem levels re mix, live {live} vs reference {ref}: move halfway, +-3 dB max"}
+            frac, lim = (0.75, 6.0) if diffuse else (0.5, 3.0)
+            M["balance"] = {"enabled": True, "fraction": frac, "limit_db": lim,
+                            "why": f"stem levels re mix, live {live} vs reference {ref}: move {frac:.0%} of the way, "
+                                   f"+-{lim:.0f} dB max" + (" (room-miked: the bass is far, the room is loud)"
+                                                            if diffuse else "")}
         else:
             M["balance"] = {"enabled": False, "why": "needs stems and a profile with stem statistics"}
         if limited:
@@ -137,9 +159,11 @@ def build(D):
                              f"(by band: {mu['tonal']['by_band']})"}
         bw = D["bandwidth"]
         ext = bw["brick_wall"] and bw["cutoff_hz"] < 18500
-        M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": bw["cutoff_hz"], "below_ref_db": 0.0,
+        M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": bw["cutoff_hz"], "below_ref_db": 0.0, "noise_mix": 0.5,
                          "why": f"content stops at {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB wall"
-                                + (" (codec low-pass): rebuild the top from the band below" if ext else
+                                + (" (codec low-pass): rebuild the top from the band below; half of it as a "
+                                   "noise-like copy with the same envelope, because a shifted codec band is sparse "
+                                   "and sounds metallic while real air is dense" if ext else
                                    ": no codec wall, nothing to rebuild")}
         M["mono_bass_hz"] = 100 if kind == "stereo" else None
         P["music"] = M
