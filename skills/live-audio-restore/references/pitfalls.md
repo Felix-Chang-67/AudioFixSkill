@@ -177,3 +177,11 @@ The same audience recording was restored twice with this skill: once by Claude, 
       the wall detector saw a 7.7 dB "edge". Codec repair and band extension stayed off, although the band under
       the cut-off was the sparsest seen (flatness 0.067).
     - Now: codec damage is judged by that texture, and the band extension starts below the transition band.
+38. **A quiet sung passage is not an MC.**
+    - What happened: a song had three passages without drums or bass, 76 s of its 249 s. All three were labelled
+      speech and given the MC treatment.
+    - Singing pauses between phrases, here 36-42 % of frames, above the 25 % rule. Whisper also wrote the sung
+      lyrics down as words, about 1 word/s, so asking it did not help. Whisper found no talk in those passages
+      afterwards (0 talker words), which flagged the error.
+    - Now: when the user says what the file is, `--content music` or `--content speech` decides, and the automatic
+      split is kept for files that hold both.

@@ -33,6 +33,11 @@ workflow:
   sentences without touching the words.
 - **Mixed files** (a concert with songs and MCs) are split automatically and each part takes its own path.
 
+**The user's word beats detection.** When the user says what a file is, pass `--content music` for a song or
+`--content speech` for an MC or talk. Leave the default `auto` only for a file that holds both, or one nobody
+described. Detection can misfire: a quiet sung passage without drums looks like talk, because singing pauses
+between phrases and Whisper writes the lyrics down as words.
+
 Everything is driven by `scripts/audiofix.py`. It always runs in the same order: **analyze → plan → restore →
 verify**. The plan is plain JSON, so you or the user can read and change it before anything is rendered.
 
@@ -67,7 +72,9 @@ verify**. The plan is plain JSON, so you or the user can read and change it befo
 
 ```bash
 bash scripts/setup.sh                       # once: installs/clones what is missing, then runs `check`
-python3 scripts/audiofix.py auto INPUT --work WORK            # analyze + restore + verify in one go
+python3 scripts/audiofix.py auto INPUT --work WORK --content music    # a song: analyze + restore + verify
+python3 scripts/audiofix.py auto INPUT --work WORK --content speech   # an MC / talk
+python3 scripts/audiofix.py auto INPUT --work WORK                    # songs and MCs in one file: split automatically
 ```
 
 `INPUT` can be any audio or video file ffmpeg reads. `WORK` collects everything:
@@ -91,7 +98,9 @@ python3 scripts/audiofix.py auto INPUT --work WORK            # analyze + restor
 
 Find out, from the request or the file itself, and ask only what you cannot infer:
 
-- **What it is.** Songs, MC, or both. Who is performing.
+- **What it is.** Songs, MC, or both. Who is performing. This sets `--content`: `music` for a song, `speech` for
+  an MC or talk, the default `auto` only for a file with both. A file name or a request like "fix this song" is
+  enough to go on.
 - **Where it came from.** Broadcast rip, audience phone recording, soundboard.
 - **What the user wants.** Natural or strongly remastered; listening, video or archive.
 
@@ -131,9 +140,10 @@ python3 scripts/audiofix.py analyze INPUT --work WORK --music-profile PROFILE \
 
 Then read `diagnosis.md` and check, in this order:
 
-1. **Content map.** Are the songs and MCs where they should be?
+1. **Content map** (with `auto` only). Are the songs and MCs where they should be?
    - A short MC inside a song set is merged into the songs on purpose (minimum 10 s for speech, 20 s for music).
-   - If a whole file is misclassified, rerun with `--content`, or edit `segments` in `plan.json`.
+   - A song with "speech" in it, or an MC with "music", is a misclassification: rerun with `--content`, or edit
+     `segments` in `plan.json`. Quiet sung passages without drums are the usual victims.
 2. **Music sections.** Cuts are placed only where the stereo image of the recording chain jumps, for example a
    change of broadcast feed. They are not placed at song changes.
 3. **Global findings.**

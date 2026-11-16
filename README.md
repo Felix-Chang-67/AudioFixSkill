@@ -89,8 +89,12 @@ bash scripts/setup.sh          # 装好缺的东西，最后自动运行 check
 ## 快速开始
 
 ```bash
-python3 scripts/audiofix.py auto 演出录音.m4a --work out
+python3 scripts/audiofix.py auto 歌曲.m4a --work out --content music    # 一首歌
+python3 scripts/audiofix.py auto MC.m4a --work out --content speech    # 一段 MC / 讲话
+python3 scripts/audiofix.py auto 整场.m4a --work out                   # 歌和 MC 混在一个文件里：自动分段
 ```
+
+用户说了文件是歌还是 MC，就用 `--content` 直接指定，比自动判断可靠。只有歌和 MC 混在一个文件里时才需要自动分段。
 
 `out/` 里会有：
 
@@ -141,6 +145,8 @@ python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile mys
 | 节奏组（鼓+贝斯）能量占比 | 高 | < 8 % |
 | 人声中的停顿比例 | 唱歌约 5 % | 说话约 45 % |
 | Whisper 每秒识别到的词 | — | ≥ 0.6 个/秒 |
+
+自动分段的弱点是没有鼓的安静唱段：唱歌在乐句之间也会停顿，Whisper 也会把歌词当成词听写出来，所以可能被误判成 MC。知道文件是什么时，用 `--content` 指定即可。
 
 最短片段：歌曲 20 秒、MC 10 秒，更短的并入相邻片段。音乐内部的"分区"只在录音链路的立体声像突变处切（比如转播换了信号源），不在换歌处切。
 

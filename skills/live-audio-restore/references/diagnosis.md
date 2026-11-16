@@ -140,7 +140,12 @@ voices end up in "other". Words still show up in the mix. Crowd shouts are spars
 
 **When to override.**
 
+- Whenever the user says what the file is: `--content music` for a song, `--content speech` for an MC or talk.
+  The automatic split is for files that hold both.
 - A file that is all MC or all music but was split anyway: use `--content speech` or `--content music`.
+- Quiet sung passages without drums are the weak spot. Singing pauses between phrases (pause share 0.36-0.42 on
+  one such song, above the 0.25 rule), and Whisper writes sung lyrics down as words (about 1 word/s). Neither rule
+  tells singing from talk there.
 - A known feed change the detector missed: add it to `sections` in `plan.json`.
 
 ## 4. Music path: decisions

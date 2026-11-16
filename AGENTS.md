@@ -12,7 +12,10 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
 1. Read `skills/live-audio-restore/SKILL.md` and follow its workflow: analyze → plan → restore → verify.
 2. Run commands from `skills/live-audio-restore/`:
    - First time: `bash scripts/setup.sh`, or at least `python3 scripts/audiofix.py check`.
-   - Then run `python3 scripts/audiofix.py auto INPUT --work WORK`, or the steps one by one.
+   - Then run `python3 scripts/audiofix.py auto INPUT --work WORK --content music` for a song, or
+     `--content speech` for an MC or talk, or the steps one by one.
+   - Leave out `--content` only for a file that holds both. When the user says what the file is, that beats the
+     automatic split.
 3. Read the right reference at the right time:
    - `references/diagnosis.md` before you interpret `diagnosis.md`;
    - `references/tuning.md` when the user gives listening feedback;
