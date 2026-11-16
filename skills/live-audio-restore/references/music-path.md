@@ -229,6 +229,15 @@ A room-miked recording is far from the bass amp and close to the crowd. On one, 
 Example: a broadcast had the bass 6-8 dB under its studio share and got +2.8 / +3 dB. In its second half, the
 guitar layer was 3.5 dB over the vocal; the guitars got -2.9 dB and the vocal +2 dB.
 
+**When the performance has a different arrangement.**
+
+- A stem below -30 dB re mix is absent and left alone. Raising it only lifts bleed.
+- With no drums at all, the performance is acoustic or stripped down, and the step is off. The reference's ratios
+  come from the full band.
+- Example: a song played with voice and one instrument against its full-band studio version. Drums sat at -53 dB
+  and bass at -65 dB re mix, and the drum stem held only the applause after the song. The balance step lowered the
+  lead vocal by 4.4 dB and raised the applause by 6 dB.
+
 ## 6. Dynamics per stem (`dynamics`)
 
 **Why per stem.** After de-limiting, the peaks come back mostly on drum hits: 97 % of the top 0.1 % peaks in the
@@ -340,7 +349,7 @@ Stems receive the same high-pass and notches.
 
 ## Loudness (`master`)
 
-Music gets the **loudest** integrated loudness, searched from -8 to -14 LUFS in 0.5 dB steps, at which the
+Music gets the **loudest** integrated loudness, searched from -8 LUFS downward in 0.5 dB steps, at which the
 lookahead limiter would reduce more than 1 dB for at most a set share of the time, and more than 2 dB for at most
 another:
 
@@ -357,6 +366,15 @@ On the open example, the open-source criteria kept 14.5 dB of crest (source 14.8
 candidate level that meets the limiter criteria, the limited music's crest is computed, and the level steps down
 0.5 dB until it holds. On the test song, -13.0 LUFS gave 14.26 dB against a floor of 14.30, so the master took
 -13.5 LUFS (14.41 dB). This is what verify's dynamics check measures, so it no longer needs a hand edit.
+
+**How far down.**
+
+- Limited sources stop at -14 LUFS.
+- Open sources may go down to the original's own loudness minus 0.5 dB (verify's "not quieter" limit), at least
+  -14 and at most -20 LUFS. One audience recording sat at -25 LUFS with peaks 22 dB over its loudness. At -14 LUFS
+  the limiter still worked above 2 dB for 0.6 % of the time and took 1.1 dB of crest.
+- The crest guard asks only for what the music brings to the master (its crest before the limiter, -0.2 dB).
+  Otherwise compression earlier in the chain would send the search to its floor for nothing.
 
 - Why this measure: "busy time" counts even 0.01 dB of release tail, and "maximum reduction" is set by one freak
   peak. Time spent above 1 and 2 dB is what you can hear.

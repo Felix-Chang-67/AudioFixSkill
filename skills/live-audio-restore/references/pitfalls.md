@@ -198,3 +198,13 @@ The same audience recording was restored twice with this skill: once by Claude, 
       pair tested.
     - Now: each frame has its mean removed before correlating, and a match must stand out in its key. The same
       song scored 0.46-0.67, other songs at most 0.24; the threshold is 0.35.
+41. **A stripped-down performance is not the studio arrangement.**
+    - What happened: a song was played with voice and one instrument, while its studio version is a full band. The
+      balance step pulled the stems toward the studio ratios. It lowered the lead vocal by 4.4 dB and raised the
+      "drum" stem by 6 dB, which held only the applause after the song.
+    - Now: a stem below -30 dB re mix is left alone, and without drums the balance step is off.
+42. **The loudness search had a floor the crest guard could not live with.**
+    - What happened: a -25 LUFS audience recording with peaks 22 dB over its loudness could not keep its crest
+      above -14 LUFS, where the search stopped. Every assistant would have hit the WARN, and the documented action
+      (stricter limiter criteria) could not clear it.
+    - Now: open sources search down to the original's loudness minus 0.5 dB, never below -20 LUFS.

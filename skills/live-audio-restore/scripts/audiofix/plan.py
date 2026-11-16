@@ -129,10 +129,22 @@ def build(D):
             live = {k: v["level_re_mix_db"] for k, v in st.items()}
             ref = {k: round(v["ratio_db"], 1) for k, v in prof["stems"].items()}
             frac, lim = (0.75, 6.0) if diffuse else (0.5, 3.0)
-            M["balance"] = {"enabled": True, "fraction": frac, "limit_db": lim,
-                            "why": f"stem levels re mix, live {live} vs reference {ref}: move {frac:.0%} of the way, "
-                                   f"+-{lim:.0f} dB max" + (" (room-miked: the bass is far, the room is loud)"
-                                                            if diffuse else "")}
+            absent = [k for k, v in live.items() if v < -30]
+            if "drums" in absent:
+                # no rhythm section: an acoustic or stripped-down performance. The reference's ratios come from a full
+                # band; pulling this arrangement toward them lowered the lead vocal and raised the applause
+                M["balance"] = {"enabled": False,
+                                "why": f"stem levels re mix, live {live} vs reference {ref}: no drums in this "
+                                       f"performance (below -30 dB re mix), so the arrangement differs from the "
+                                       f"reference and its stem ratios do not apply. Raising an absent stem only "
+                                       f"lifts bleed and crowd noise"}
+            else:
+                M["balance"] = {"enabled": True, "fraction": frac, "limit_db": lim, "skip": absent,
+                                "why": f"stem levels re mix, live {live} vs reference {ref}: move {frac:.0%} of the "
+                                       f"way, +-{lim:.0f} dB max" + (" (room-miked: the bass is far, the room is loud)"
+                                                                    if diffuse else "")
+                                       + (f"; {', '.join(absent)} below -30 dB re mix: absent, left alone (a boost "
+                                          f"would only lift bleed)" if absent else "")}
         else:
             M["balance"] = {"enabled": False, "why": "needs stems and a profile with stem statistics"}
         if limited:
@@ -252,7 +264,10 @@ def build(D):
     music_open = bool(ml) and not (ml["lra_lu"] < 4 or ml["plr_db"] < 11)
     o1, o2 = (2.5, 0.5) if music_open else (8.0, 1.5)
     min_crest = round(ml["crest3s_db"] - 0.5, 2) if music_open else None
-    P["master"] = {"ceiling_dbtp": -1.0, "over1_max_pct": o1, "over2_max_pct": o2, "search_lufs": [-8.0, -14.0],
+    # a quiet, peaky open recording may only keep its crest below -14 LUFS: search down to the original's loudness
+    # (-0.5 dB, verify's "not quieter" limit), never below -20
+    floor = min(-14.0, max(-20.0, round(ml["lufs"] - 0.5, 1))) if music_open else -14.0
+    P["master"] = {"ceiling_dbtp": -1.0, "over1_max_pct": o1, "over2_max_pct": o2, "search_lufs": [-8.0, floor],
                    "min_crest_db": min_crest, "speech_only_lufs": -16.0, "speech_offset_db": 4.0,
                    "why": f"music: the loudest level at which the limiter works above 1 dB at most {o1} % and above 2 dB "
                           f"at most {o2} % of the time ("

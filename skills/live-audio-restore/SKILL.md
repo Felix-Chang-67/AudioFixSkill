@@ -217,7 +217,7 @@ Every check is PASS or WARN, with before and after numbers. Investigate each WAR
 | WARN | Usual cause | Action |
 |---|---|---|
 | Music not closer to the reference tone | Wrong genre profile, or a very short music part | Build an artist profile; or lower `music.match.alpha` |
-| Dynamics squashed further | Loudness target too high for this material | Lower `master.over1_max_pct` / `over2_max_pct` |
+| Dynamics squashed further | Loudness target too high for this material, or the music reached the master already compressed (the `[master]` log says so) | Lower `master.over1_max_pct` / `over2_max_pct`; in the second case lighten `music.dynamics` |
 | Quiet and loud parts not kept apart (open recording) | Compression or a hand edit flattened the song | Check that `music.macro` is on and `music.dynamics` is light; lower the master criteria |
 | Quieter than the original (open recording) | Master criteria set too strict by hand | Raise `master.over1_max_pct` / `over2_max_pct` toward 2.5 / 0.5 |
 | Anti-phase left in the mids | An anti-phase layer in a stem that was not flagged | Add the stem to `music.antiphase.stems` |

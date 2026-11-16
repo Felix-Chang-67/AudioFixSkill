@@ -21,6 +21,15 @@ def class_weights(n, segs, fade_s=1.0):
 def music_target(ym, lu0, M, log):
     pk = dsp.isp_peaks(ym)
     lo, hi = M["search_lufs"]
+    mc = M.get("min_crest_db")
+    if mc is not None:
+        # the master can only keep the crest the music arrives with: ask for that, not more, or the search would run
+        # down to its floor for nothing
+        c0 = loudness.crest_3s(ym)
+        if c0 - 0.2 < mc:
+            log(f"[master] the music arrives with a 3 s crest of {c0:.2f} dB, under the {mc:.2f} dB asked: the "
+                f"limiter keeps it within 0.2 dB")
+            mc = c0 - 0.2
     t = lo
     while t >= hi - 1e-9:
         g = dsp.limiter_gain(pk, M["ceiling_dbtp"], pre_gain_db=t - lu0)
@@ -28,7 +37,6 @@ def music_target(ym, lu0, M, log):
         o1, o2 = float(np.mean(gr > 1) * 100), float(np.mean(gr > 2) * 100)
         log(f"[master] try {t:.1f} LUFS: limiter above 1 dB {o1:.1f} %, above 2 dB {o2:.1f} %")
         if o1 <= M["over1_max_pct"] and o2 <= M["over2_max_pct"]:
-            mc = M.get("min_crest_db")
             if mc is None:
                 return t
             # open recordings: also keep the 3 s crest within 0.5 dB of the original (what verify checks)

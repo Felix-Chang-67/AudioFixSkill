@@ -187,6 +187,8 @@ def run(x, st, plan, music_mask, work, log=print):
                 mixs = _sel(sum(st.values()) + res, a, b, meas)
                 pm = np.mean(mixs.astype(np.float64) ** 2) + 1e-30
                 for s in st:
+                    if s in M["balance"].get("skip", []):          # absent from this performance: nothing to balance
+                        continue
                     cur = 10 * np.log10(np.mean(_sel(st[s], a, b, meas).astype(np.float64) ** 2) / pm + 1e-30)
                     adj = float(np.clip((prof["stems"][s]["ratio_db"] - cur) * M["balance"]["fraction"],
                                         -M["balance"]["limit_db"], M["balance"]["limit_db"]))
