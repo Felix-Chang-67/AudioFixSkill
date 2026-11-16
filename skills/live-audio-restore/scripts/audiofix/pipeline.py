@@ -58,6 +58,19 @@ def restore(work, plan, log=print):
         y_s, _ = speech.run(x, st, plan, mask_of(n, spc), act, 0.01, log, work=work,
                             chain=info.get("music", {}).get("vocal_eq"))
     y, rep = master.finalize(y_m, y_s, plan, log)
+    if info.get("music", {}).get("ledger") is not None:
+        from . import profiles
+        mi = info["music"]
+        ms = (plan["music"].get("match") or {}).get("measure_section")
+        mm = mask_of(n, mus)
+        meas = (mm & mask_of(n, [ms])) if ms else mm
+        row = music.snapshot("master", y, mm, profiles.load(plan["profiles"]["music"])["ltas"], meas,
+                             (plan["music"].get("band_ext") or {}).get("cutoff_hz"))
+        mi["ledger"].append(row)
+        log(f"[music]   after master: crest {row['crest3s_db']} dB, LRA {row['lra_lu']} LU, loudness {row['lufs']} LUFS")
+        with open(os.path.join(work, "steps.json"), "w") as fh:
+            json.dump({k: mi.get(k) for k in ("ledger", "balance", "overall_eq")}, fh, ensure_ascii=False, indent=1,
+                      default=float)
     out = os.path.join(work, "restored.wav")
     audio_io.save_wav(out, y, bits=24)
     audio_io.encode_aac(out, os.path.join(work, "restored.m4a"))

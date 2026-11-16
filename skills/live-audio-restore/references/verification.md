@@ -28,6 +28,31 @@ stay in `verification.json`:
 - **The voice is the mix** (no stems, or separation lost the voice): the background owns part of the spectrum, and
   removing it moves the measured "voice" too.
 
+## Review: what PASS does not cover (`review.md`)
+
+`verify` also writes `review.md`, and prints each item as a `[review]` line. Every item needs an answer in the
+delivery.
+
+| Item | From | What to tell the listener |
+|---|---|---|
+| applause | Timeline windows with no vocal, the drum stem carrying them, and peaks 20 dB or more over their level | It was processed with the music and its claps held back; ask whether to keep, soften or cut it |
+| arrangement | Drums or bass below -30 dB re mix outside applause | Stripped-down performance, or a bass separation could not find: what the reference's low end means here |
+| peaks | PLR above 18 dB, with the largest peaks' time, width and brightness | Narrow, bright peaks are claps or knocks near the recorder; holding them back is right |
+| reference | Same-song match under 0.55, or the generic profile | How far "like the studio version" can go |
+| highs | Codec repair applied | The top octave is rebuilt, and how to make it quieter |
+| warn | A failed check, traced through the step ledger | Which step moved the measure, by how much, and the knob that was changed |
+| limits | Overall EQ at its +6 dB cap, or a stem balance move at its limit | What stayed short and why a bigger boost would only lift noise |
+| edits | The plan used against the default plan | Every edit, with its reason |
+| previous | The plan and checks of the render before | What changed, and the comparison file |
+
+**The step ledger (`steps.json`).** After every music step, the render records the music's loudness, 3 s crest,
+loudness range, mono-sum loss and tone deviation from the reference. A WARN is traced to the steps that moved its
+measure the wrong way.
+
+Example: on a vocal-led acoustic song, the crest lost 0.5 dB in the stem dynamics (the vocal compressor). The drum
+stem's peak limit was needed: it held back the claps of the applause. Without the ledger, the cause took four
+control renders to find.
+
 ## Numbers to quote in the delivery
 
 `verification.md` has before and after tables for:

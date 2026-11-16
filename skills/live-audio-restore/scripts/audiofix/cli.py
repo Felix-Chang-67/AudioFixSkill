@@ -1,7 +1,8 @@
 """Command line: check | profile | analyze | restore | verify | auto. Run `python3 scripts/audiofix.py -h`."""
 import argparse, json, os, sys
 
-from . import __version__, analysis, audio_io, delimit, pipeline, plan as PL, profiles, reference, report, stems, verify
+from . import (__version__, analysis, audio_io, delimit, pipeline, plan as PL, profiles, reference, report, review,
+               stems, verify)
 
 
 class Log:
@@ -70,6 +71,15 @@ def _analyze(a, log):
     except Exception as e:                                   # noqa: BLE001
         log(f"[analyze] overview plot skipped: {e}")
     log(f"[analyze] wrote diagnosis.md, plan.json, overview.png in {a.work}")
+    items = review.material(D)
+    with open(os.path.join(a.work, "diagnosis.md"), "a") as fh:
+        fh.write("\n## Review before rendering\n\n" + ("".join(f"- **{i['kind']}**: {i['text']}\n" for i in items)
+                                                       or "Nothing unusual found.\n"))
+    for i in items:
+        log(f"[review] {i['kind']}: {i['text']}")
+    if items:
+        log("[next] the [review] lines above describe this recording: read them before rendering. Edit the plan "
+            "only for a measured reason (AGENTS.md 5) and keep each edit's reason for the delivery")
     hint = _reference_hint(P)
     if hint:
         log(hint)
@@ -87,9 +97,26 @@ def _reference_hint(P):
             "then `auto INPUT --work WORK --music-profile S.json`")
 
 
+KEEP = ("restored.wav", "restored.m4a", "AB.wav", "compare.png", "verification.md", "verification.json", "master.json",
+        "steps.json", "review.md", "plan_used.json")
+
+
+def _keep_previous(work, log):
+    """The last render moves to previous/, so every change can be compared with what came before."""
+    if not os.path.exists(os.path.join(work, "restored.wav")):
+        return
+    prev = os.path.join(work, "previous")
+    os.makedirs(prev, exist_ok=True)
+    for f in KEEP:
+        if os.path.exists(os.path.join(work, f)):
+            os.replace(os.path.join(work, f), os.path.join(prev, f))
+    log(f"[restore] the previous render is kept in {prev}")
+
+
 def _restore(a, log):
     P = PL.load(a.plan or os.path.join(a.work, "plan.json"))
     P = PL.override(P, a.set)
+    _keep_previous(a.work, log)
     PL.save(P, os.path.join(a.work, "plan_used.json"))
     out, rep = pipeline.restore(a.work, P, log)
     log(f"[restore] wrote {out} ({rep['seconds']} s)")
@@ -102,8 +129,21 @@ def _verify(a, P, rep, log):
         fh.write(report.verification_md(V, P, rep))
     log(f"[verify] wrote verification.md, AB.wav, compare.png in {a.work}")
     warns = [c["check"] for c in V.get("checks", []) if not c["pass"]]
-    log("[next] " + (f"{len(warns)} WARN: {'; '.join(warns)}. Before delivering, find the cause and act (SKILL.md "
-                     f"step 6), then re-render" if warns else "all checks PASS"))
+    w = a.work
+    D = review.load_json(os.path.join(w, "diagnosis.json")) or {}
+    prev = {"plan": review.load_json(os.path.join(w, "previous", "plan_used.json")),
+            "verification": review.load_json(os.path.join(w, "previous", "verification.json"))}
+    items = review.material(D) + review.render(D, P, V, review.load_json(os.path.join(w, "steps.json")),
+                                               review.load_json(os.path.join(w, "plan.json")),
+                                               prev if prev["plan"] else None)
+    review.write(os.path.join(w, "review.md"), items, "Review before delivering")
+    for i in items:
+        log(f"[review] {i['kind']}: {i['text']}")
+    log("[next] " + (f"{len(warns)} WARN: {'; '.join(warns)}. Before delivering, act on the cause the [review] lines "
+                     f"name (SKILL.md step 6), then re-render" if warns else "all checks PASS"))
+    if items:
+        log(f"[next] review.md has {len(items)} item(s). PASS is not the end: answer every [review] line in the "
+            f"delivery (what it is, what was done, what the listener may want)")
     hint = _reference_hint(P)
     if hint:
         log(hint)

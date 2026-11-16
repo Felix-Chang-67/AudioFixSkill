@@ -7,7 +7,7 @@ band extension -> bass to mono. Returns the pre-master mix; loudness and limitin
 import json, os
 import numpy as np
 
-from . import SR, delimit, dsp, loudness, profiles
+from . import SR, delimit, dsp, loudness, measure, profiles
 from .dsp import CENT, undb
 
 
@@ -81,6 +81,20 @@ def macro_restore(x, y, mask, max_db=6.0, hop_s=0.5, win_s=3.0, smooth_s=4.0):
                                                        "max_db": round(float(np.max(np.abs(d[valid]))), 2)}
 
 
+def snapshot(step, y, mask, prof_ltas, meas=None, cutoff=None):
+    """One row of the step ledger: the music (mask) after a step. Loudness, 3 s crest, loudness range, mono-sum loss
+    and the tone's RMS deviation from the reference (on the measured passage). A verify WARN is traced to the step
+    that moved its measure, without control renders."""
+    ym = y[mask] if mask is not None and mask.any() else y
+    lu = loudness.integrated(ym)
+    mid = ((ym[:, 0] + ym[:, 1]) / 2)[:, None]
+    mono = loudness.integrated(np.repeat(mid, 2, axis=1))
+    src = y[meas] if meas is not None and meas.sum() > 5 * SR else ym
+    return {"step": step, "lufs": round(float(lu), 2), "crest3s_db": round(float(loudness.crest_3s(ym)), 2),
+            "lra_lu": round(float(loudness.loudness_range(ym)), 2), "mono_loss_db": round(float(mono - lu), 2),
+            "tone_rms_db": measure.tonal_deviation(src, prof_ltas, cutoff)["rms_db"]}
+
+
 def _fmt(g):
     return " ".join(f"{f}:{np.interp(np.log(f), np.log(CENT), g):+.1f}" for f in (50, 80, 125, 250, 500, 1000, 2000,
                                                                                    4000, 6300, 10000, 12500))
@@ -103,7 +117,17 @@ def run(x, st, plan, music_mask, work, log=print):
     else:
         meas, tsecs, TW = music_mask, secs, W
     cutoff = plan["music"]["band_ext"]["cutoff_hz"] if M.get("band_ext") else None
-    info = {}
+    info = {"ledger": [], "balance": [], "overall_eq": []}
+    mm = music_mask[:n]
+    pl = np.asarray(prof["ltas"])
+
+    def snap(step, y_now):
+        row = snapshot(step, y_now, mm, pl, meas, cutoff)
+        info["ledger"].append(row)
+        log(f"[music]   after {step}: crest {row['crest3s_db']} dB, LRA {row['lra_lu']} LU, mono loss "
+            f"{row['mono_loss_db']} dB, tone off by {row['tone_rms_db']} dB")
+
+    snap("start", x)
 
     # 1. de-limit
     gm = None
@@ -122,20 +146,27 @@ def run(x, st, plan, music_mask, work, log=print):
 
     if st is None:                                                   # ---------------- mix-only fallback
         y = x if gm is None else x * gm
+        if gm is not None:
+            snap("de-limit", y)
         if "mix" in M["antiphase"]["stems"]:
             y, a = dsp.fix_antiphase(y)
             log(f"[music] polarity repair on the mix: {a['treated_pct']:.0f} % of energy")
+            snap("polarity", y)
     else:
         st = dict(st)
         res = x - sum(st.values())
+        mix = lambda: sum(st.values()) + res                            # noqa: E731
         if gm is not None:
             st = {k: v * gm for k, v in st.items()}
             res = res * gm
+            snap("de-limit", mix())
         # 2. polarity
         for s in M["antiphase"]["stems"]:
             if s in st:
                 st[s], a = dsp.fix_antiphase(st[s])
                 log(f"[music] polarity repair on {s}: {a['treated_pct']:.0f} % of its energy")
+        if any(s in st for s in M["antiphase"]["stems"]):
+            snap("polarity", mix())
         # 2b. room-miked images: each stem's width toward the reference stem's (vocal and drums back to the centre)
         wm = M.get("width_match", {})
         if wm.get("enabled"):
@@ -153,15 +184,19 @@ def run(x, st, plan, music_mask, work, log=print):
                     st[s] = np.stack([mid + side, mid - side], axis=1).astype(np.float32)
                     log(f"[music] width {s}: side {cur:+.1f} -> {cur + 20 * np.log10(g):+.1f} dB re mid "
                         f"(reference {tgt:+.1f})")
+            snap("width", mix())
         # 3. de-ess, transients, width
         if M["deess"]["enabled"]:
             st["vocals"], a = dsp.deess(st["vocals"], pct=M["deess"]["pct"], max_cut=M["deess"]["max_cut_db"])
             log(f"[music] de-ess: {a}")
+            snap("de-ess", mix())
         if M["transients"]["enabled"]:
             st["drums"], a = dsp.transients(st["drums"], M["transients"]["amount"], M["transients"]["max_db"])
             log(f"[music] drum transients: {a}")
+            snap("drum transients", mix())
         if M["widen"]["enabled"]:
             st["other"] = dsp.widen(st["other"], M["widen"]["side_db"])
+            snap("widen", mix())
         # 4. per-stem tonal match, per section
         if M["stem_match"]["enabled"] and prof.get("stems"):
             mix = sum(st.values()) + res
@@ -180,6 +215,7 @@ def run(x, st, plan, music_mask, work, log=print):
                                         "mean": [round(float(v), 2) for v in np.mean(curves, axis=0)]}
                     with open(os.path.join(work, "vocal_eq.json"), "w") as fh:
                         json.dump(info["vocal_eq"], fh)
+            snap("stem EQ", mix())
         # 5. balance, per section
         if M["balance"]["enabled"] and prof.get("stems"):
             gains = {s: np.zeros(n, np.float32) for s in st}
@@ -193,6 +229,7 @@ def run(x, st, plan, music_mask, work, log=print):
                     # no rhythm section here: an acoustic or stripped-down arrangement, not the reference's full band
                     log(f"[music] balance {a:6.1f}-{b:6.1f}s: drums {cur_all['drums']:+.1f} dB re mix, absent: a "
                         f"stripped-down arrangement, the reference's stem ratios do not apply; nothing moved")
+                    info["balance"].append({"section": [a, b], "drums_absent": round(cur_all["drums"], 1)})
                     continue
                 for s in st:
                     cur = cur_all[s]
@@ -202,9 +239,12 @@ def run(x, st, plan, music_mask, work, log=print):
                     adj = float(np.clip((prof["stems"][s]["ratio_db"] - cur) * M["balance"]["fraction"],
                                         -M["balance"]["limit_db"], M["balance"]["limit_db"]))
                     gains[s] += w * adj
+                    info["balance"].append({"section": [a, b], "stem": s, "live_db": round(cur, 1),
+                                            "move_db": round(adj, 1), "at_limit": abs(adj) >= M["balance"]["limit_db"] - 0.05})
                     log(f"[music] balance {a:6.1f}-{b:6.1f}s {s:6s}: live {cur:+.1f} dB, reference "
                         f"{prof['stems'][s]['ratio_db']:+.1f} dB -> {adj:+.1f} dB")
             st = {s: v * undb(gains[s])[:, None].astype(np.float32) for s, v in st.items()}
+            snap("balance", mix())
         # 6. dynamics per stem
         D = M["dynamics"]
         if D["enabled"]:
@@ -217,11 +257,14 @@ def run(x, st, plan, music_mask, work, log=print):
                 r, at, rl, pc = D[s]
                 st[s], a = dsp.compress(st[s], r, at, rl, pct=pc)
                 log(f"[music] compress {s}: {r}:1 {a}")
+            snap("stem dynamics", mix())
         y = sum(st.values()) + res
         if D["enabled"]:
             r, at, rl, pc = D["bus"]
             y, a = dsp.compress(y, r, at, rl, pct=pc)
             log(f"[music] bus glue {r}:1: {a}")
+            if r > 1:
+                snap("bus glue", y)
     # 7. overall tonal match, per section
     if M["match"]["enabled"]:
         p = M["match"]
@@ -230,6 +273,10 @@ def run(x, st, plan, music_mask, work, log=print):
         y = dsp.apply_sectioned(y, [dsp.fir_from_curve(c) for c in curves], TW)
         for (a, b), c in zip(tsecs, curves):
             log(f"[music] overall EQ {a:6.1f}-{b:6.1f}s  {_fmt(c)}")
+            info["overall_eq"].append({"section": [a, b], "hi_db": p["hi_db"], "lo_db": p["lo_db"],
+                                       "db": {f: round(float(np.interp(np.log(f), np.log(CENT), c)), 1)
+                                              for f in (50, 80, 125, 250, 500, 1000, 2000, 4000, 6300, 10000, 12500)}})
+        snap("overall EQ", y)
     # 8. band extension
     be = M.get("band_ext", {})
     if be.get("enabled"):
@@ -239,12 +286,15 @@ def run(x, st, plan, music_mask, work, log=print):
             tgt = dsp.band_rel(y, be["cutoff_hz"] - 2500, be["cutoff_hz"] - 300) - 6.0
         y, a = dsp.hf_extend(y, be["cutoff_hz"], tgt - be.get("below_ref_db", 0.0), noise_mix=be.get("noise_mix", 0.0))
         log(f"[music] band extension above {be['cutoff_hz']} Hz: {a}")
+        snap("band extension", y)
     # 9. bass to mono
     if M.get("mono_bass_hz"):
         y = dsp.mono_bass(y, M["mono_bass_hz"])
+        snap("mono bass", y)
     # 10. open recordings: the original's loudness contour back (quiet parts stay quiet)
     if M.get("macro", {}).get("enabled"):
         y, a = macro_restore(x, y, music_mask, M["macro"].get("max_db", 6.0))
         info["macro"] = a
         log(f"[music] loudness contour of the original restored: {a}")
+        snap("loudness contour", y)
     return y.astype(np.float32), info

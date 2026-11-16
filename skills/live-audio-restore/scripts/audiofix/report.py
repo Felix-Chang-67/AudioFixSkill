@@ -37,6 +37,17 @@ def diagnosis_md(D, P):
                 f"| mid-band anti-phase | worst {st.get('mid_corr_min')}, negative in {st.get('mid_corr_neg_pct')} % of windows | >= 10 % | {_v(st.get('mid_corr_neg_pct', 0) < 10)} |",
                 f"| mono compatibility | mono-sum loss {st.get('mono_loss_db')} dB | < -1.5 dB | {_v(st.get('mono_loss_db', 0) >= -1.5)} |"]
     out += [f"| noise floor | quietest 5 %: {D['noise']['p5_dbfs']} dBFS, median {D['noise']['p50_dbfs']} dBFS | | |"]
+    tl = D.get("timeline") or []
+    if tl:
+        stems = [k for k in ("vocals", "drums", "bass", "other") if k in tl[0]]
+        out += ["", "## Timeline (what is in the file)", "",
+                "| s | LUFS | peak over RMS | " + " | ".join(f"{k} (dB re mix)" for k in stems) + " |",
+                "|---|---|---|" + "---|" * len(stems)]
+        out += [f"| {r['t0']:.0f}-{r['t1']:.0f} | {r['lufs']} | {r['peak_over_rms_db']} | "
+                + " | ".join(str(r[k]) for k in stems) + " |" for r in tl]
+        if D.get("peaks"):
+            out += ["", "Largest peaks: " + "; ".join(f"{p['t_s']} s: {p['db_over_rms']} dB over RMS, {p['width_ms']} ms "
+                                                       f"wide, {p['share_above_1khz']:.0%} above 1 kHz" for p in D["peaks"])]
     mu = D.get("music")
     if mu:
         out += ["", "## Music", "", f"- {mu['duration_s']} s; loudness {mu['loudness']}",

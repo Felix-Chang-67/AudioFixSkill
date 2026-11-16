@@ -148,6 +148,8 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
     D["processing_segments"] = [[round(a, 2), round(b, 2), c] for a, b, c in proc]
     D["sections"] = [[round(a, 2), round(b, 2)] for a, b in secs]
     log(f"[analyze] content: {D['processing_segments']}; music sections {D['sections']}")
+    D["timeline"] = measure.timeline(x, st)
+    D["peaks"] = measure.top_peaks(x)
 
     mus = regions(proc, "music")
     spc = regions(proc, "speech")

@@ -129,6 +129,53 @@ def stereo(y):
     return res
 
 
+def timeline(x, stems=None, win_s=15.0):
+    """What is in the file, at a glance: per window, loudness, peak over RMS and each stem's share of the mix (dB).
+    Intros, quiet passages, a missing rhythm section and applause after the song show up here."""
+    out = []
+    w = int(win_s * SR)
+    for i in range(0, len(x), w):
+        seg = x[i:i + w]
+        if len(seg) < SR:
+            break
+        p = float(np.mean(seg.astype(np.float64) ** 2)) + 1e-20
+        lu = L.integrated(seg)
+        row = {"t0": round(i / SR, 1), "t1": round(min(len(x), i + w) / SR, 1),
+               "lufs": round(float(lu), 1) if np.isfinite(lu) and lu > -70 else -70.0,
+               "peak_over_rms_db": round(float(db(np.abs(seg).max() + 1e-12) - 10 * np.log10(p)), 1)}
+        for k, v in (stems or {}).items():
+            row[k] = round(float(10 * np.log10(np.mean(v[i:i + w].astype(np.float64) ** 2) / p + 1e-12)), 1)
+        out.append(row)
+    return out
+
+
+def top_peaks(x, k=6, min_gap_s=0.25):
+    """The k largest peaks: time, dB over the file's RMS, width at half height (ms), and the share of the 50 ms
+    around each above 1 kHz. Claps near the recorder are narrow (a few ms) and bright (above 0.6)."""
+    from scipy.signal import butter, sosfiltfilt
+    m = x.mean(axis=1).astype(np.float64)
+    a = np.abs(m)
+    rms = float(np.sqrt(np.mean(m ** 2))) + 1e-12
+    cand = np.argpartition(a, -4000)[-4000:] if len(a) > 4000 else np.arange(len(a))
+    picks = []
+    for i in cand[np.argsort(a[cand])[::-1]]:
+        if all(abs(int(i) - j) > min_gap_s * SR for j in picks):
+            picks.append(int(i))
+        if len(picks) >= k:
+            break
+    hp = butter(4, 1000, "highpass", fs=SR, output="sos")
+    out = []
+    for i in sorted(picks):
+        lo, hi = max(0, i - SR // 40), min(len(m), i + SR // 40)
+        seg = m[lo:hi]
+        h = sosfiltfilt(hp, seg) if len(seg) > 30 else seg
+        above = np.flatnonzero(a[max(0, i - SR // 10):i + SR // 10] > a[i] / 2)
+        out.append({"t_s": round(i / SR, 2), "db_over_rms": round(float(db(a[i] / rms)), 1),
+                    "width_ms": round(float((above[-1] - above[0]) / SR * 1000), 1) if len(above) else 0.0,
+                    "share_above_1khz": round(float(np.sum(h ** 2) / (np.sum(seg ** 2) + 1e-20)), 2)})
+    return out
+
+
 def hf_flatness(y, cutoff=None, max_s=120.0, chunk_s=30.0):
     """Texture of the band just below the cut-off: median spectral flatness (1 = dense, noise-like air; 0 = sparse,
     peaky tones) over the louder 70 % of STFT frames, on up to max_s seconds spread over the file. Low-bitrate codecs

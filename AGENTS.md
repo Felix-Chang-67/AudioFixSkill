@@ -33,8 +33,14 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
      its reason.
    - Hand-tuned plans made results depend on the assistant: 3 dB apart in loudness, 3 LU in dynamics.
    - Act on every WARN, and on the `[next]` lines `restore` prints, before delivering.
-6. Never overwrite the user's source file; everything goes into the work folder.
-7. Explain the result in the user's language, in plain words.
+6. Work carefully. All checks PASS is not the end:
+   - Read the `[review]` lines after `analyze` and after `restore` (also in `review.md`), and answer every one in the
+     delivery. They cover applause, missing instruments, extreme peaks, a weak reference, rebuilt highs, steps at
+     their limits, and your edits to the default plan.
+   - `review.md` traces each WARN to the step that caused it (the ledger in `steps.json`) and names its knob.
+   - Change one knob at a time and re-render. The last render stays in `previous/` for comparison.
+7. Never overwrite the user's source file; everything goes into the work folder.
+8. Explain the result in the user's language, in plain words.
 
 ## Working on the code
 

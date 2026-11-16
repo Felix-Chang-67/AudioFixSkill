@@ -67,6 +67,18 @@ verify**. The plan is plain JSON, so you or the user can read and change it befo
    The pipeline avoids all of these by default. Keep it that way unless the user asks for one.
 6. Explain results in the user's language, in plain terms: what was wrong, what changed, how big the change is,
    and what could not be fixed.
+7. **Work carefully: all checks PASS is not the end.** The tool prints `[review]` lines after `analyze` and after
+   `restore`, and writes `review.md`. They name what a careful engineer would check, from the measurements:
+   - applause or clapping in the file;
+   - a missing rhythm section or bass, which means a different arrangement from the studio version;
+   - extreme peaks;
+   - a weak or generic tone reference;
+   - rebuilt highs;
+   - an EQ or balance step that ran into its limit;
+   - the edits you made to the default plan.
+
+   Answer every one in the delivery. Assistants that stopped at PASS shipped applause raised by 6 dB and a vocal
+   lowered by 4.4 dB.
 
 ## Quick start
 
@@ -93,6 +105,9 @@ takes the artist and title from the file's tags, or from `--artist` / `--title`.
 | `AB.wav` | Original, then restored, for the same passages, loudness-matched per pair |
 | `compare.png` | Long-term spectra against the reference, and before/after spectrograms |
 | `vocal_eq.json` | Songs only: the EQ given to the vocal stem. MCs from the same show can reuse it |
+| `review.md` | What to check and answer before delivering, with the cause and knob of every WARN |
+| `steps.json` | The step ledger: loudness, 3 s crest, loudness range, mono loss and tone after every music step |
+| `previous/` | The render before the last one, with its plan and checks, for comparison |
 | `log.txt` | Everything the run printed |
 
 ## Workflow
@@ -145,8 +160,10 @@ python3 scripts/audiofix.py analyze INPUT --work WORK [--content music|speech] \
     [--music-profile PROFILE | --artist A --title T | --no-lookup] [--language ja] [--asr-model small]
 ```
 
-Then read `diagnosis.md` and check, in this order:
+Then read the `[review]` lines and `diagnosis.md`, and check, in this order:
 
+0. **Timeline.** What is in the file, per 15 s: level, peaks, and each stem's share. Look for the intro, quiet
+   passages, applause, talk, and instruments that are missing.
 1. **Content map** (with `auto` only). Are the songs and MCs where they should be?
    - A short MC inside a song set is merged into the songs on purpose (minimum 10 s for speech, 20 s for music).
    - A song with "speech" in it, or an MC with "music", is a misclassification: rerun with `--content`, or edit
@@ -210,9 +227,17 @@ python3 scripts/audiofix.py restore --work WORK      # renders, then runs verify
 python3 scripts/audiofix.py verify --work WORK       # re-check an existing render
 ```
 
-### 6. Read the verification and act on warnings
+### 6. Read the verification and the review, and act on warnings
 
-Every check is PASS or WARN, with before and after numbers. Investigate each WARN before delivering:
+Every check is PASS or WARN, with before and after numbers. `review.md` traces each WARN to the step that moved its
+measure (the ledger in `steps.json`) and names that step's knob.
+
+- Change that one knob, re-render, and compare. The previous render stays in `previous/`, and `review.md` lists what
+  changed between the two.
+- Do not change several knobs at once. Do not run control renders by hand: the ledger already shows which step did
+  what.
+
+The usual causes:
 
 | WARN | Usual cause | Action |
 |---|---|---|
@@ -235,6 +260,7 @@ Send `restored.wav` (lossless), `restored.m4a` (for phones) and `AB.wav`, and as
 first. The last `[next]` lines of `restore` repeat this. In the message:
 
 - What was wrong, in plain words, with the key numbers.
+- An answer to every item of `review.md`: what it is, what was done, and what the listener may want.
 - Which reference the tone was matched to: the studio version of this song, or the generic profile and why.
 - What each step did, with before and after numbers from `verification.md`.
 - What was not fixed or cannot be fixed: invented content, crowd under the words, codec holes.
