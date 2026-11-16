@@ -186,10 +186,19 @@ def run(x, st, plan, music_mask, work, log=print):
             for (a, b), w in zip(tsecs, TW):
                 mixs = _sel(sum(st.values()) + res, a, b, meas)
                 pm = np.mean(mixs.astype(np.float64) ** 2) + 1e-30
+                cur_all = {s: 10 * np.log10(np.mean(_sel(st[s], a, b, meas).astype(np.float64) ** 2) / pm + 1e-30)
+                           for s in st}
+                absent_db = M["balance"].get("absent_db", -30.0)
+                if cur_all.get("drums", 0.0) < absent_db:
+                    # no rhythm section here: an acoustic or stripped-down arrangement, not the reference's full band
+                    log(f"[music] balance {a:6.1f}-{b:6.1f}s: drums {cur_all['drums']:+.1f} dB re mix, absent: a "
+                        f"stripped-down arrangement, the reference's stem ratios do not apply; nothing moved")
+                    continue
                 for s in st:
-                    if s in M["balance"].get("skip", []):          # absent from this performance: nothing to balance
+                    cur = cur_all[s]
+                    if cur < absent_db:                           # absent from this performance: nothing to balance
+                        log(f"[music] balance {a:6.1f}-{b:6.1f}s {s:6s}: live {cur:+.1f} dB, absent: left alone")
                         continue
-                    cur = 10 * np.log10(np.mean(_sel(st[s], a, b, meas).astype(np.float64) ** 2) / pm + 1e-30)
                     adj = float(np.clip((prof["stems"][s]["ratio_db"] - cur) * M["balance"]["fraction"],
                                         -M["balance"]["limit_db"], M["balance"]["limit_db"]))
                     gains[s] += w * adj
