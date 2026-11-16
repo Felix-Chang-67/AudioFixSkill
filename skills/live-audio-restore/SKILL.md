@@ -77,6 +77,9 @@ python3 scripts/audiofix.py auto INPUT --work WORK --content speech   # an MC / 
 python3 scripts/audiofix.py auto INPUT --work WORK                    # songs and MCs in one file: split automatically
 ```
 
+For a song, `auto` also looks up the studio version of that very song online, the best tone target (step 1). It
+takes the artist and title from the file's tags, or from `--artist` / `--title`.
+
 `INPUT` can be any audio or video file ffmpeg reads. `WORK` collects everything:
 
 | File | What it is |
@@ -108,11 +111,15 @@ The **reference** decides what "good" means for the tone, so pick it deliberatel
 
 | Situation | Reference |
 |---|---|
-| A single song, and its studio version exists | `profile --name X --itunes-artist "Artist" --itunes-song "Title" [--country jp]`, or `--files track --song`: **the best reference**, it is what "like the album" means. `analyze` finds the preview's passage in the recording and measures tone there, like with like. On an audience recording, it brought the mix within 1.7 dB RMS of the studio master in that passage. Live, remix and similar versions are skipped |
+| A single song, and its studio version exists | **Automatic** when the tags or `--artist` / `--title` name the song and the network allows: `analyze` fetches the official iTunes preview, checks that its passage is in the recording and measures tone there, like with like. Without network, ask the user for the studio track: `profile --name X --files track --song --out X.json`, then `--music-profile X.json`. **The best reference**, it is what "like the album" means: on an audience recording it brought the mix within 1.7 dB RMS of the studio master in that passage. Live, remix and similar versions are skipped |
 | The user has studio tracks of this artist | `profile --name X --files a.flac b.mp3 ...` |
 | Online, artist known | `profile --name X --itunes-artist "Artist" [--country jp]`: official 30 s previews, about 1 min per 3 clips |
 | Neither | Bundled `jrock_band` (guitar band, loud modern master). For other genres, build a profile from any representative studio tracks the user can supply |
 | Speech | Bundled `speech_ltass` (long-term average speech spectrum), used automatically |
+
+`analyze` logs which reference it used and why (`[reference]` lines and `diagnosis.md`). If a song ended up on the
+generic profile, a `[next]` line says so. Ask the user for the studio version rather than delivering silently.
+`--music-profile` chooses the reference yourself; `--no-lookup` keeps everything offline.
 
 ### 2. Check the environment
 
@@ -134,8 +141,8 @@ python3 scripts/audiofix.py check
 ### 3. Analyze
 
 ```bash
-python3 scripts/audiofix.py analyze INPUT --work WORK --music-profile PROFILE \
-    [--content music|speech] [--language ja] [--asr-model small]
+python3 scripts/audiofix.py analyze INPUT --work WORK [--content music|speech] \
+    [--music-profile PROFILE | --artist A --title T | --no-lookup] [--language ja] [--asr-model small]
 ```
 
 Then read `diagnosis.md` and check, in this order:
@@ -228,6 +235,7 @@ Send `restored.wav` (lossless), `restored.m4a` (for phones) and `AB.wav`, and as
 first. The last `[next]` lines of `restore` repeat this. In the message:
 
 - What was wrong, in plain words, with the key numbers.
+- Which reference the tone was matched to: the studio version of this song, or the generic profile and why.
 - What each step did, with before and after numbers from `verification.md`.
 - What was not fixed or cannot be fixed: invented content, crowd under the words, codec holes.
 - Every edit you made to the plan, with its reason.

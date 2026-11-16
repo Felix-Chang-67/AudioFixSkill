@@ -1,7 +1,7 @@
 """Command line: check | profile | analyze | restore | verify | auto. Run `python3 scripts/audiofix.py -h`."""
 import argparse, json, os, sys
 
-from . import __version__, analysis, audio_io, delimit, pipeline, plan as PL, profiles, report, stems, verify
+from . import __version__, analysis, audio_io, delimit, pipeline, plan as PL, profiles, reference, report, stems, verify
 
 
 class Log:
@@ -59,7 +59,8 @@ def _analyze(a, log):
     if getattr(a, "asr_model", None):
         os.environ["AUDIOFIX_ASR_MODEL"] = a.asr_model
     D = analysis.run(a.input, a.work, a.content, a.music_profile, a.speech_profile, not a.no_stems, log,
-                     codec_repair=getattr(a, "codec_repair", "auto"))
+                     codec_repair=getattr(a, "codec_repair", "auto"),
+                     lookup={"artist": a.artist, "title": a.title, "country": a.country, "lookup": not a.no_lookup})
     P = PL.build(D)
     PL.save(P, os.path.join(a.work, "plan.json"))
     with open(os.path.join(a.work, "diagnosis.md"), "w") as fh:
@@ -69,7 +70,21 @@ def _analyze(a, log):
     except Exception as e:                                   # noqa: BLE001
         log(f"[analyze] overview plot skipped: {e}")
     log(f"[analyze] wrote diagnosis.md, plan.json, overview.png in {a.work}")
+    hint = _reference_hint(P)
+    if hint:
+        log(hint)
     return D, P
+
+
+def _reference_hint(P):
+    """A [next] line when a song was matched to the generic profile: its own studio version is the better target."""
+    ref = P.get("reference") or {}
+    if not P.get("music") or not ref.get("auto") or ref.get("used") != reference.DEFAULT:
+        return None
+    return ("[next] the tone target was the bundled generic profile (" + ref.get("why", "") + "). The studio "
+            "version of this very song is the best target: rerun with --artist and --title if the tags lack them, "
+            "or ask the listener for the studio track and run `profile --name S --files STUDIO --song --out S.json`, "
+            "then `auto INPUT --work WORK --music-profile S.json`")
 
 
 def _restore(a, log):
@@ -89,6 +104,9 @@ def _verify(a, P, rep, log):
     warns = [c["check"] for c in V.get("checks", []) if not c["pass"]]
     log("[next] " + (f"{len(warns)} WARN: {'; '.join(warns)}. Before delivering, find the cause and act (SKILL.md "
                      f"step 6), then re-render" if warns else "all checks PASS"))
+    hint = _reference_hint(P)
+    if hint:
+        log(hint)
     log(f"[next] deliver {os.path.join(a.work, 'restored.wav')}, restored.m4a and AB.wav (the listener starts with "
         f"AB.wav); quote before/after numbers from verification.md and every plan edit you made, with its reason")
     return V
@@ -148,7 +166,14 @@ def main(argv=None):
         q.add_argument("--work", required=True, help="work folder for this file")
         q.add_argument("--content", choices=["auto", "music", "speech"], default="auto",
                        help="force the content class instead of detecting songs vs MC")
-        q.add_argument("--music-profile", default="jrock_band", help="bundled profile name or a profile JSON path")
+        q.add_argument("--music-profile", default=None,
+                       help="bundled profile name or a profile JSON path. Default: the studio version of this song, "
+                            "looked up online from the tags (or --artist/--title); else the bundled jrock_band")
+        q.add_argument("--artist", help="artist, for the studio-version lookup when the file has no tags")
+        q.add_argument("--title", help="song title, for the studio-version lookup when the file has no tags")
+        q.add_argument("--country", help="iTunes store to search first, e.g. jp, us (default: from the script)")
+        q.add_argument("--no-lookup", action="store_true",
+                       help="do not look the studio version up online; use --music-profile or the default")
         q.add_argument("--speech-profile", default="speech_ltass")
         q.add_argument("--no-stems", action="store_true", help="skip stem separation (mix-only fallbacks)")
         q.add_argument("--language", help="spoken language for Whisper, e.g. ja, en, zh (default: detect)")

@@ -40,8 +40,13 @@ def diagnosis_md(D, P):
     mu = D.get("music")
     if mu:
         out += ["", "## Music", "", f"- {mu['duration_s']} s; loudness {mu['loudness']}",
+                f"- Reference: `{D['profiles']['music']}`. {(D.get('reference') or {}).get('why', '')}",
                 f"- Tone vs profile `{D['profiles']['music']}`: RMS deviation {mu['tonal']['rms_db']} dB; "
                 f"by band (dB, + means too much): {mu['tonal']['by_band']}"]
+        rs = D.get("reference_section")
+        if rs:
+            out += [f"- The studio version's passage was found at {rs['start_s']}-{rs['end_s']} s (chroma similarity "
+                    f"{rs['similarity']}): tone is measured there"]
         if mu.get("stems"):
             out += ["", "| stem | level re mix | anti-phase energy | worst corr | median corr | anti-phase by band (cos) |",
                     "|---|---|---|---|---|---|"]

@@ -21,6 +21,7 @@ def build(D):
     has_stems = D.get("stems_dir") is not None
     P = {"version": 1, "input": D["input"], "work": D["work"], "capabilities": cap,
          "segments": D["processing_segments"], "sections": D["sections"], "profiles": D["profiles"],
+         "reference": D.get("reference"),
          "notes": [], "repair": {}, "music": None, "speech": None}
     if not has_stems:
         P["notes"].append("no stem separation available: stem-level steps fall back to mix-level ones "

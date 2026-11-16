@@ -185,3 +185,16 @@ The same audience recording was restored twice with this skill: once by Claude, 
       afterwards (0 talker words), which flagged the error.
     - Now: when the user says what the file is, `--content music` or `--content speech` decides, and the automatic
       split is kept for files that hold both.
+39. **Only the assistant that wrote the skill used the song's own studio version.**
+    - What happened: another assistant ran the same skill on the same kind of recording and never built a same-song
+      reference.
+    - Why: `AGENTS.md` and the quick start went straight to `auto`, which silently used the generic profile. The
+      advice sat in one table of `SKILL.md`. A sandbox without internet could not have fetched the preview anyway.
+    - Now: `analyze` / `auto` look the studio version up themselves from the tags, or `--artist` / `--title`. When
+      they cannot, a `[next]` line asks for the studio track.
+40. **A cosine of chroma vectors matches anything.**
+    - What happened: a looked-up preview "matched" a different song at 0.91, in a passage that was mostly the
+      closing silence. Unit-norm chroma is never negative, so any two frames have a high cosine: 0.82-0.91 for every
+      pair tested.
+    - Now: each frame has its mean removed before correlating, and a match must stand out in its key. The same
+      song scored 0.46-0.67, other songs at most 0.24; the threshold is 0.35.

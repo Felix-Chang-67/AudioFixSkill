@@ -2,7 +2,7 @@
 import json, os, time
 import numpy as np
 
-from . import SR, audio_io, delimit, dsp, loudness, measure, profiles, segments, stems as S
+from . import SR, audio_io, delimit, dsp, loudness, measure, profiles, reference, segments, stems as S
 
 
 def regions(segs, label):
@@ -32,8 +32,10 @@ def cat_frames(act, regs, hop):
     return np.concatenate(parts) if parts else act[:0]
 
 
-def run(input_path, work, content="auto", music_profile="jrock_band", speech_profile="speech_ltass",
-        use_stems=True, log=print, codec_repair="auto"):
+def run(input_path, work, content="auto", music_profile=None, speech_profile="speech_ltass",
+        use_stems=True, log=print, codec_repair="auto", lookup=None):
+    """music_profile None: the studio version of this song, looked up online from the tags or lookup's
+    artist / title (see reference.py), else the bundled default. lookup: {artist, title, country, lookup}."""
     os.makedirs(work, exist_ok=True)
     t0 = time.time()
     cap = capabilities()
@@ -44,8 +46,18 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
     n = len(x)
     D = {"input": os.path.abspath(input_path), "work": os.path.abspath(work), "source": src,
          "duration_s": round(n / SR, 2), "capabilities": cap, "content_hint": content,
-         "profiles": {"music": music_profile, "speech": speech_profile}}
+         "profiles": {"music": music_profile or reference.DEFAULT, "speech": speech_profile}}
     log(f"[analyze] {n / SR:.1f} s, {src.get('codec')} {src.get('bit_rate', 0) // 1000} kb/s; capabilities {cap}")
+    if music_profile:
+        D["reference"] = {"auto": False, "used": music_profile, "why": "chosen with --music-profile"}
+    elif content == "speech":
+        D["reference"] = {"auto": False, "used": reference.DEFAULT, "why": "talk only: no song to look up"}
+    else:
+        # the studio version of this very song is the best tonal target: look it up whenever nobody chose one
+        lk = dict(lookup or {})
+        D["profiles"]["music"], D["reference"] = reference.find(
+            src.get("tags", {}), work, artist=lk.get("artist"), title=lk.get("title"), country=lk.get("country"),
+            lookup=lk.get("lookup", True), with_stems=use_stems and cap["stems"], log=log)
 
     D["loudness"] = loudness.summary(x)
     D["clipping"] = measure.clipping(x)
@@ -142,13 +154,23 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
     if mus:
         xm = cat(x, mus)
         M = {"duration_s": round(len(xm) / SR, 1), "loudness": loudness.summary(xm), "stereo": measure.stereo(xm)}
-        prof = profiles.load(music_profile)
-        M["tonal"] = measure.tonal_deviation(xm, prof["ltas"], D["bandwidth"]["cutoff_hz"])
+        prof = profiles.load(D["profiles"]["music"])
         if prof.get("song_chroma"):
             # the reference is this very song: find its passage, so tone is compared like with like
             loc = profiles.locate(prof["song_chroma"], x, regions=mus)
             D["reference_section"] = ({"start_s": loc[0], "end_s": loc[1], "similarity": loc[2]} if loc else None)
-            log(f"[analyze] reference passage in the recording: {D['reference_section'] or 'not found (similarity < 0.85)'}")
+            log(f"[analyze] reference passage in the recording: {D['reference_section'] or 'not found (no passage with chroma correlation >= 0.35 that stands out in its key)'}")
+            if loc is None and D["reference"].get("auto"):
+                # a looked-up preview that matches no passage: another song of the same name, or a different
+                # arrangement. A wrong target is worse than the generic one
+                D["reference"].update(used=reference.DEFAULT, rejected=D["profiles"]["music"],
+                                      why=D["reference"]["why"] + "; but its passage was not found in the recording "
+                                          "(chroma correlation < 0.35, or no clear key: another song or arrangement), "
+                                          "so the bundled default profile is used")
+                D["profiles"]["music"] = reference.DEFAULT
+                prof = profiles.load(reference.DEFAULT)
+                log(f"[reference] {D['reference']['why']}")
+        M["tonal"] = measure.tonal_deviation(xm, prof["ltas"], D["bandwidth"]["cutoff_hz"])
         if st is not None:
             sm = {k: cat(v, mus) for k, v in st.items()}
             mixm = sum(sm.values()) + cat(x - sum(st.values()), mus)

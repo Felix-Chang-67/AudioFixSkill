@@ -118,10 +118,18 @@ python3 scripts/audiofix.py restore --work out                  # 修复 + 验�
 python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3   # 改一个参数重渲染
 ```
 
-**音色参考决定什么叫"好"。** 内置的 `jrock_band` 是吉他乐队、现代响度母带的统计数据。想要"像专辑"，最好的参考是这首歌自己的录音室版；其次是同一艺人的录音室音轨：
+**音色参考决定什么叫"好"。** 想要"像专辑"，最好的参考是这首歌自己的录音室版。修歌时 `auto` 会自己去找：
+
+- 从文件标签里读歌手和歌名，也可以用 `--artist` / `--title` 指定；
+- 能联网就去 iTunes 找这首歌的录音室版官方试听，并确认它和录音里的某一段对得上；
+- 对不上、找不到或者没网，就退回内置的 `jrock_band`（吉他乐队、现代响度母带的统计数据），并提示你提供录音室版。
+
+也可以手动指定参考：
 
 ```bash
-# 这首歌自己的录音室版（最好）：iTunes 官方 30 秒试听，需要联网，只保存统计数据，不保存音频
+# 这首歌自己的录音室版（最好）：手上有音轨时
+python3 scripts/audiofix.py profile --name mysong --files 录音室版.flac --song --out mysong.json
+# 或者 iTunes 官方 30 秒试听（需要联网；auto 在标签齐全时会自动做这一步）
 python3 scripts/audiofix.py profile --name mysong --itunes-artist "艺人名" --itunes-song "歌名" --country jp --out mysong.json
 # 该艺人的录音室音轨
 python3 scripts/audiofix.py profile --name myband --files a.flac b.mp3 c.m4a --out myband.json

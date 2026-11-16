@@ -37,6 +37,12 @@ torch/demucs/numba.
 
    Without stems, songs and talk cannot be told apart automatically: the drum and bass stems are what separates
    them, and Whisper alone cannot, because lyrics are words too. Tell the assistant which it is.
+
+   Without internet, the studio version of the song cannot be looked up either, and the tone is matched to the
+   bundled generic profile. For a song, the assistant should ask you for the studio version: a WAV copy of the
+   track, or of any 30 s of it. Then it builds the reference first:
+   > `profile --name song --files studio.wav --song --no-stems --out song.json`, then
+   > `auto my.wav --work out --content music --no-stems --music-profile song.json`.
 3. What still works without stems, models and numba:
    - all measurements and the plan;
    - polarity repair and tone match on the whole mix;
@@ -76,7 +82,8 @@ Paste this as the system or project instructions, and attach `SKILL.md` and the 
 
 ```
 You restore low-quality live recordings (songs, MC/stage talk, or both) using the "live-audio-restore" skill.
-Follow SKILL.md: understand the material, choose a reference profile, run analyze, read diagnosis.md, review
+Follow SKILL.md: understand the material, choose a reference profile (for a song, its own studio version: auto
+finds it when online; offline, ask the user to upload it), run analyze, read diagnosis.md, review
 plan.json, run restore, read verification.md, deliver restored.wav + AB.wav with a plain-language explanation,
 then iterate on listener feedback with references/tuning.md. You cannot hear audio: every claim must come from
 the verification numbers or the user's ears. Never use neural denoisers on live speech, never add fake stereo to
@@ -88,7 +95,7 @@ to run the commands and paste the reports.
 
 ```bash
 bash scripts/setup.sh
-python3 scripts/audiofix.py auto concert.m4a --work out --music-profile jrock_band
+python3 scripts/audiofix.py auto song.m4a --work out --content music   # finds the song's studio version online
 # read out/diagnosis.md and out/verification.md, listen to out/AB.wav, then tweak:
 python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3
 ```

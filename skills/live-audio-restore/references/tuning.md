@@ -19,7 +19,7 @@ python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.
 | Fake, metallic or harsh highs | The codec's sparse texture, boosted and copied up | Make sure codec repair ran (`analyze --codec-repair on`); `music.band_ext.noise_mix=0.7`; then `music.band_ext.below_ref_db=3` |
 | Fizzy top, "digital" highs | The rebuilt top is too loud | `music.band_ext.below_ref_db=3`; or `music.band_ext.enabled=false` |
 | Not clean, unfocused, the vocal floats, "I can hear the room" | A room-miked image | `music.width_match.enabled=true` (default on room-miked recordings); narrower: lower the targets, e.g. `music.width_match.targets='{"vocals":-35,"drums":-26,"bass":-45}'` |
-| Should sound like the album | The reference is an average, not this song | Build a profile from the song itself: `profile --itunes-artist A --itunes-song S`, then re-analyze with `--music-profile` |
+| Should sound like the album | The reference is an average, not this song | Check `diagnosis.md` → Reference. If it is the generic profile, give the song: `--artist A --title S` (online), or the studio track: `profile --name S --files TRACK --song --out S.json`, then re-analyze with `--music-profile S.json` |
 | Squashed, no punch | Master too loud, or not enough de-limiting | `master.over1_max_pct=5 master.over2_max_pct=1`; `music.delimit.depth=2` |
 | Pumping, breathing | De-limiting too deep, or drum shaving too hard | `music.delimit.depth=1.5`; `music.dynamics.drum_ceiling_over_lufs=13` (limited sources; open ones already use 15) |
 | Too quiet compared with other music | Perceptual target too strict for their use | Limited source: `master.over1_max_pct=12 master.over2_max_pct=2.5`. Open source: `master.over1_max_pct=5 master.over2_max_pct=1` (costs some dynamics) |

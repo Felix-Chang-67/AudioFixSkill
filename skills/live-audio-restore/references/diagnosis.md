@@ -209,8 +209,15 @@ Check the 3-10 kHz share before blaming cymbals. On the broadcast example, the v
 **Choosing the profile matters more than any knob.** Genre sets the target. A jazz club recording matched to a loud
 rock profile will be pushed toward rock. Build a profile from the artist or the genre whenever possible.
 
-Best of all is the studio version of the very song:
-`profile --itunes-artist ARTIST --itunes-song TITLE`, or `--files` with the track.
+Best of all is the studio version of the very song. `analyze` and `auto` look it up themselves when no
+`--music-profile` is given:
+
+- **Artist and title:** from the file's tags, or `--artist` / `--title`. Track numbers and live markers are removed,
+  and titles such as MC or SE are skipped.
+- **Stores:** tried in an order set by the script of the names. Kana → jp, us; hangul → kr, us; ideographs → jp, tw,
+  hk, cn, us; otherwise us, gb, jp. `--country` puts one first.
+- **Fallback:** offline, untagged or not found means the bundled profile, with a `[next]` line asking for the studio
+  track: `profile --files TRACK --song`. By hand: `profile --itunes-artist ARTIST --itunes-song TITLE`.
 
 On an audience recording, the artist's 27-song average left 100-400 Hz 5-12 dB under that song's own studio
 master. Songs differ: that one has a loud bass. Its own 30 s preview brought the section within ±3 dB.
@@ -219,10 +226,20 @@ master. Songs differ: that one has a loud bass. Its own 30 s preview brought the
 between passages: one measured 8 dB more low end in the previewed passage than in the song as a whole. Matching
 the whole song's average to the preview over-boosted the lows by 5-7 dB in that very passage.
 
-A same-song profile therefore carries the preview's chroma, and `analyze` finds the passage in the recording
-(tempo-tolerant chroma cross-similarity, at least 0.85; 0.91 on the test song). Tone and stem balance are measured
-there, and the resulting fixed EQ applies to the whole song. On the test song this brought the mix within 1.7 dB
-RMS of the studio master in that passage, against 2.9 dB with the whole-song average.
+A same-song profile therefore carries the preview's chroma, and `analyze` finds the passage in the recording. Tone
+and stem balance are measured there, and the resulting fixed EQ applies to the whole song. On the test song this
+brought the mix within 1.7 dB RMS of the studio master in that passage, against 2.9 dB with the whole-song average.
+
+**Finding the passage.**
+
+- Each chroma frame has its mean removed, so a flat frame (silence, noise, a dense distorted wall) scores 0.
+- The score is the mean per-frame correlation, searched over tempo 0.94-1.06 and key shifts of -2 to +2 semitones.
+- It must reach 0.35 and beat the best other key shift by 0.1. Another song scores about the same in every key.
+- Calibration on four live recordings and two previews: the same song scored 0.46 and 0.67, other songs at most
+  0.24. The raw cosine used before scored 0.82-0.91 for every pair, silence included, and accepted a wrong song at
+  0.91.
+- A looked-up preview whose passage is not found is dropped for the bundled profile. A wrong song or another
+  arrangement is a worse target than the generic one.
 
 `--itunes-song` keeps the studio version: an exact title match without "live", "remix", "instrumental" and
 the like. The first try picked up a live-album version too.

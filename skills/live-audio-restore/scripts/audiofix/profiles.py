@@ -117,24 +117,41 @@ def chroma(y, hop=4096, nfft=8192):
     return C / (np.linalg.norm(C, axis=0, keepdims=True) + 1e-9)
 
 
-def locate(song_chroma, y, regions=None, min_sim=0.85):
-    """Where does the reference passage sit in the recording? Tempo-tolerant (0.94-1.06) chroma cross-similarity.
+def _centred(C):
+    """Each chroma frame minus its mean, at unit norm. A flat frame (noise, silence, a dense distorted wall) then scores
+    0, so only real harmonic agreement counts. Raw unit-norm chroma is never negative, which gave any rock passage, and
+    even silence, a cosine of 0.82-0.91 against any preview."""
+    C = C - C.mean(axis=0, keepdims=True)
+    return C / (np.linalg.norm(C, axis=0, keepdims=True) + 1e-9)
+
+
+def locate(song_chroma, y, regions=None, min_sim=0.35, key_margin=0.1):
+    """Where does the reference passage sit in the recording? Mean per-frame correlation of centred chroma, tempo-
+    tolerant (0.94-1.06) and over key shifts of -2..+2 semitones (a song played lower live). On live recordings the same
+    song scored 0.46-0.67 and other songs by the same band at most 0.24. The match must also stand out in its key, by
+    key_margin over the best other shift: another song scores about the same in every key.
     Returns (start_s, end_s, similarity) or None when nothing matches well enough."""
-    q0 = np.asarray(song_chroma, float)
-    c = chroma(y)
+    q0 = _centred(np.asarray(song_chroma, float))
+    c0 = _centred(chroma(y))
     hop_s = 4096 / SR
-    best = (-1.0, 0, 1.0, 0)
-    for rate in np.linspace(0.94, 1.06, 13):
-        n = int(q0.shape[1] / rate)
-        if n < 10 or n >= c.shape[1]:
-            continue
-        q = q0[:, np.clip((np.arange(n) * rate).astype(int), 0, q0.shape[1] - 1)]
-        score = sum(np.correlate(c[k], q[k], mode="valid") for k in range(12)) / n
-        i = int(np.argmax(score))
-        if score[i] > best[0]:
-            best = (float(score[i]), i, rate, n)
-    s, i, rate, n = best
-    if s < min_sim:
+    per_key = []
+    for shift in range(-2, 3):
+        c = np.roll(c0, shift, axis=0)
+        best = (-1.0, 0, 1.0, 0)
+        for rate in np.linspace(0.94, 1.06, 13):
+            n = int(q0.shape[1] / rate)
+            if n < 10 or n >= c.shape[1]:
+                continue
+            q = q0[:, np.clip((np.arange(n) * rate).astype(int), 0, q0.shape[1] - 1)]
+            score = sum(np.correlate(c[k], q[k], mode="valid") for k in range(12)) / n
+            i = int(np.argmax(score))
+            if score[i] > best[0]:
+                best = (float(score[i]), i, rate, n)
+        per_key.append(best)
+    k = int(np.argmax([b[0] for b in per_key]))
+    s, i, rate, n = per_key[k]
+    others = max(b[0] for j, b in enumerate(per_key) if j != k)
+    if s < min_sim or s - others < key_margin:
         return None
     t0, t1 = i * hop_s, (i + n) * hop_s
     if regions and not any(a <= t0 and t1 <= b + 1 for a, b in regions):
@@ -149,9 +166,10 @@ def side_minus_mid(y):
     return float(10 * np.log10(np.mean(side ** 2) / (np.mean(mid ** 2) + 1e-30) + 1e-12))
 
 
-def fetch_itunes(artist, out_dir, limit=30, country="us", song=None):
+def fetch_itunes(artist, out_dir, limit=30, country="us", song=None, info=None):
     """Download official 30 s preview clips of an artist from the public iTunes Search API (tonal reference only).
-    song: keep only tracks whose title contains it - the studio version of the very song is the best target."""
+    song: keep only tracks whose title contains it - the studio version of the very song is the best target.
+    info: a dict that receives the chosen tracks (title, release, artist, store)."""
     os.makedirs(out_dir, exist_ok=True)
     q = urllib.parse.urlencode({"term": f"{artist} {song}" if song else artist, "entity": "song", "limit": 200,
                                "country": country})
@@ -182,8 +200,14 @@ def fetch_itunes(artist, out_dir, limit=30, country="us", song=None):
     for t in match:
         fn = os.path.join(out_dir, f"{t['trackId']}.m4a")
         if not os.path.exists(fn):
-            urllib.request.urlretrieve(t["previewUrl"], fn)
+            with urllib.request.urlopen(t["previewUrl"], timeout=60) as r:    # a stalled download must not hang
+                data = r.read()
+            with open(fn, "wb") as fh:
+                fh.write(data)
         got.append(fn)
+        if info is not None:
+            info.setdefault("tracks", []).append({"track": t.get("trackName"), "collection": t.get("collectionName"),
+                                                  "artist": t.get("artistName"), "store": country})
         if len(got) >= limit:
             break
     return got

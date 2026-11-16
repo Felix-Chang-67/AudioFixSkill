@@ -16,6 +16,11 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
      `--content speech` for an MC or talk, or the steps one by one.
    - Leave out `--content` only for a file that holds both. When the user says what the file is, that beats the
      automatic split.
+   - For a song, `auto` looks up the studio version of that very song online and makes it the tone target. It reads
+     the artist and title from the file's tags, or from `--artist` / `--title`, and fetches the official iTunes
+     preview. It drops the preview if its passage is not found in the recording.
+   - Without network, tags or a match, it falls back to the bundled profile and prints a `[next]` line. Then ask the
+     user for the studio track (`references/other-ai.md`).
 3. Read the right reference at the right time:
    - `references/diagnosis.md` before you interpret `diagnosis.md`;
    - `references/tuning.md` when the user gives listening feedback;
