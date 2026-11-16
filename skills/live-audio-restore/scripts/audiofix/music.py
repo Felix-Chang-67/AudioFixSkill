@@ -155,18 +155,18 @@ def run(x, st, plan, music_mask, work, log=print):
     else:
         st = dict(st)
         res = x - sum(st.values())
-        mix = lambda: sum(st.values()) + res                            # noqa: E731
+        mixnow = lambda: sum(st.values()) + res                         # noqa: E731
         if gm is not None:
             st = {k: v * gm for k, v in st.items()}
             res = res * gm
-            snap("de-limit", mix())
+            snap("de-limit", mixnow())
         # 2. polarity
         for s in M["antiphase"]["stems"]:
             if s in st:
                 st[s], a = dsp.fix_antiphase(st[s])
                 log(f"[music] polarity repair on {s}: {a['treated_pct']:.0f} % of its energy")
         if any(s in st for s in M["antiphase"]["stems"]):
-            snap("polarity", mix())
+            snap("polarity", mixnow())
         # 2b. room-miked images: each stem's width toward the reference stem's (vocal and drums back to the centre)
         wm = M.get("width_match", {})
         if wm.get("enabled"):
@@ -184,19 +184,19 @@ def run(x, st, plan, music_mask, work, log=print):
                     st[s] = np.stack([mid + side, mid - side], axis=1).astype(np.float32)
                     log(f"[music] width {s}: side {cur:+.1f} -> {cur + 20 * np.log10(g):+.1f} dB re mid "
                         f"(reference {tgt:+.1f})")
-            snap("width", mix())
+            snap("width", mixnow())
         # 3. de-ess, transients, width
         if M["deess"]["enabled"]:
             st["vocals"], a = dsp.deess(st["vocals"], pct=M["deess"]["pct"], max_cut=M["deess"]["max_cut_db"])
             log(f"[music] de-ess: {a}")
-            snap("de-ess", mix())
+            snap("de-ess", mixnow())
         if M["transients"]["enabled"]:
             st["drums"], a = dsp.transients(st["drums"], M["transients"]["amount"], M["transients"]["max_db"])
             log(f"[music] drum transients: {a}")
-            snap("drum transients", mix())
+            snap("drum transients", mixnow())
         if M["widen"]["enabled"]:
             st["other"] = dsp.widen(st["other"], M["widen"]["side_db"])
-            snap("widen", mix())
+            snap("widen", mixnow())
         # 4. per-stem tonal match, per section
         if M["stem_match"]["enabled"] and prof.get("stems"):
             mix = sum(st.values()) + res
@@ -215,7 +215,7 @@ def run(x, st, plan, music_mask, work, log=print):
                                         "mean": [round(float(v), 2) for v in np.mean(curves, axis=0)]}
                     with open(os.path.join(work, "vocal_eq.json"), "w") as fh:
                         json.dump(info["vocal_eq"], fh)
-            snap("stem EQ", mix())
+            snap("stem EQ", mixnow())
         # 5. balance, per section
         if M["balance"]["enabled"] and prof.get("stems"):
             gains = {s: np.zeros(n, np.float32) for s in st}
@@ -244,7 +244,7 @@ def run(x, st, plan, music_mask, work, log=print):
                     log(f"[music] balance {a:6.1f}-{b:6.1f}s {s:6s}: live {cur:+.1f} dB, reference "
                         f"{prof['stems'][s]['ratio_db']:+.1f} dB -> {adj:+.1f} dB")
             st = {s: v * undb(gains[s])[:, None].astype(np.float32) for s, v in st.items()}
-            snap("balance", mix())
+            snap("balance", mixnow())
         # 6. dynamics per stem
         D = M["dynamics"]
         if D["enabled"]:
@@ -257,7 +257,7 @@ def run(x, st, plan, music_mask, work, log=print):
                 r, at, rl, pc = D[s]
                 st[s], a = dsp.compress(st[s], r, at, rl, pct=pc)
                 log(f"[music] compress {s}: {r}:1 {a}")
-            snap("stem dynamics", mix())
+            snap("stem dynamics", mixnow())
         y = sum(st.values()) + res
         if D["enabled"]:
             r, at, rl, pc = D["bus"]
