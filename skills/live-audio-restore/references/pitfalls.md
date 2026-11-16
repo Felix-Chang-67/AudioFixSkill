@@ -172,3 +172,8 @@ The same audience recording was restored twice with this skill: once by Claude, 
     - Now the preview's passage is found in the recording by chroma, and the tone is measured there.
 36. **"The same song" can be a live version.** The song search returned the album track and a live-album recording
     of it, whose vocal width differed by 20 dB. The filter now keeps the studio version.
+37. **A codec low-pass is not always a brick wall.**
+    - What happened: an MP3-style encoder rolled off over 1.5 kHz (12.7 kHz: -35 dB, 14.3 kHz: -53 dB re mid), and
+      the wall detector saw a 7.7 dB "edge". Codec repair and band extension stayed off, although the band under
+      the cut-off was the sparsest seen (flatness 0.067).
+    - Now: codec damage is judged by that texture, and the band extension starts below the transition band.

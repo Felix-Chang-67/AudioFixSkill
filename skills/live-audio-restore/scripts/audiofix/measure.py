@@ -129,6 +129,26 @@ def stereo(y):
     return res
 
 
+def hf_flatness(y, cutoff=None, max_s=120.0, chunk_s=30.0):
+    """Texture of the band just below the cut-off: median spectral flatness (1 = dense, noise-like air; 0 = sparse,
+    peaky tones) over the louder 70 % of STFT frames, on up to max_s seconds spread over the file. Low-bitrate codecs
+    zero whole tiles: their band measures 0.06-0.07, a healthy one 0.28-0.41."""
+    from scipy.signal import stft
+    hi = min(12500.0, (cutoff or 20000.0) - 500.0)
+    lo = max(2000.0, min(8000.0, hi - 3000.0))
+    n, L = len(y), int(chunk_s * SR)
+    k = max(1, int(max_s // chunk_s))
+    m = y.mean(axis=1)
+    if n > k * L:
+        m = np.concatenate([m[s:s + L] for s in np.linspace(0, n - L, k).astype(int)])
+    f, _, Z = stft(m, SR, nperseg=2048, noverlap=1536)
+    P = np.abs(Z[(f >= lo) & (f < hi)]) ** 2
+    e = P.sum(axis=0)
+    P = P[:, e > np.percentile(e, 30)]
+    fl = np.exp(np.mean(np.log(P + 1e-20), axis=0)) / (np.mean(P, axis=0) + 1e-20)
+    return {"band_hz": [int(lo), int(hi)], "flatness": round(float(np.median(fl)), 3)}
+
+
 def coherent_antiphase(stem, max_s=120.0, chunk_s=30.0):
     """Share of a stem's energy that the polarity repair would rotate (coherent anti-phase STFT bins), estimated on
     up to max_s seconds spread over the stem, plus the stem's mono-sum loss. Catches anti-phase confined to some bands

@@ -33,8 +33,17 @@ separation:
 The tone is otherwise unchanged. Its own extension above the cut-off is weak (27 dB under the studio level), so the
 band extension (step 8) still runs. It now works from a natural band.
 
-**When.** `--codec-repair auto` (the default) runs it when a codec wall below 16 kHz is found and Apollo is
-installed. Everything after it uses `input_repaired.wav`. The cut-off and the global numbers stay those of the
+**When.** `--codec-repair auto` (the default) runs it when the cut-off is below 16 kHz and the band under it is
+sparse: an 8-12.5 kHz spectral flatness below 0.15. Apollo must be installed.
+
+| Band texture (flatness) | Value |
+|---|---|
+| Damaged rips | 0.06-0.07 |
+| Healthy bands: a 160 kb/s broadcast, an AAC 128 kb/s file, a studio master | 0.28-0.41 |
+
+The shape of the cut-off does not decide. MP3-style encoders roll off over a 1-1.5 kHz transition band instead
+of a brick wall: one rip fell 18 dB between 12.7 and 14.3 kHz and showed only a 7.7 dB "edge", which a
+wall-only rule missed. Everything after it uses `input_repaired.wav`. The cut-off and the global numbers stay those of the
 original, and `verify` compares with the original.
 
 **Cost.** On the CPU, about 6x real time: a 5 min song takes about 30 min.

@@ -21,6 +21,8 @@ def separate(wav_path, work, model="htdemucs"):
     folder = os.path.join(out, model, name)
     if all(os.path.exists(os.path.join(folder, f"{s}.wav")) for s in STEMS):
         return folder
+    if os.path.islink(folder) and not os.path.exists(folder):     # a cache link whose target is gone
+        os.unlink(folder)
     from . import device
     dev = device.pick()
     cmd = [sys.executable, "-m", "demucs", "-n", model, "--float32", "-o", out, "-d", dev, wav_path]

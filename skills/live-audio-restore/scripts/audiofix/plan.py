@@ -165,9 +165,13 @@ def build(D):
                                   f"stem balance are measured there, like with like, and the fixed EQ applies to the "
                                   f"whole song (the song's other parts may differ by 8 dB in the low end)")
         bw = D["bandwidth"]
-        ext = bw["brick_wall"] and bw["cutoff_hz"] < 18500
-        M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": bw["cutoff_hz"], "below_ref_db": 0.0, "noise_mix": 0.5,
-                         "why": f"content stops at {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB wall"
+        damaged = bool(D.get("codec_repair", {}).get("codec_damage"))
+        ext = (bw["brick_wall"] and bw["cutoff_hz"] < 18500) or damaged
+        # a codec low-pass with a transition band (no brick wall) is already down at the measured cut-off: start lower
+        ext_cut = bw["cutoff_hz"] if bw["brick_wall"] else max(8000, bw["cutoff_hz"] - 800)
+        M["band_ext"] = {"enabled": bool(ext), "cutoff_hz": ext_cut, "below_ref_db": 0.0, "noise_mix": 0.5,
+                         "why": f"content stops at {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB edge"
+                                + (" and a codec's sparse texture below it" if damaged else "")
                                 + (" (codec low-pass): rebuild the top from the band below; half of it as a "
                                    "noise-like copy with the same envelope, because a shifted codec band is sparse "
                                    "and sounds metallic while real air is dense" if ext else

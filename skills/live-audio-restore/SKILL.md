@@ -118,7 +118,7 @@ python3 scripts/audiofix.py check
 | De-limiter | Over-limited music gets stronger drum-transient shaping instead of neural de-limiting |
 | faster-whisper | The MC talker is located by voicing instead of word timings (about 80 % accurate against word timings); `verify` loses the intelligibility check |
 | numba | Slower, vectorised approximations |
-| Apollo (codec repair) | On low-bitrate rips (codec wall below 16 kHz), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It runs on an NVIDIA (CUDA) or Apple silicon (MPS) GPU when one is found, and falls back to the CPU otherwise or if the GPU run fails. On the CPU it is slow, about 6x real time, so for long concerts you may choose `--codec-repair off` on purpose. `check` shows the device; `AUDIOFIX_DEVICE=cpu|cuda|mps` forces one |
+| Apollo (codec repair) | On low-bitrate rips (cut-off below 16 kHz and a sparse band under it), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It runs on an NVIDIA (CUDA) or Apple silicon (MPS) GPU when one is found, and falls back to the CPU otherwise or if the GPU run fails. On the CPU it is slow, about 6x real time, so for long concerts you may choose `--codec-repair off` on purpose. `check` shows the device; `AUDIOFIX_DEVICE=cpu|cuda|mps` forces one |
 
 `setup.sh` installs all of them. On a machine without internet, see `references/other-ai.md`.
 

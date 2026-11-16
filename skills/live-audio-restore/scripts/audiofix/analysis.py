@@ -61,11 +61,15 @@ def run(input_path, work, content="auto", music_profile="jrock_band", speech_pro
     # fake once boosted or shifted. Everything after this (stems, measurements, rendering) uses the repaired signal;
     # the cut-off and the global numbers above stay those of the original, and verify compares with the original.
     bw = D["bandwidth"]
-    wall = bool(bw["brick_wall"] and bw["cutoff_hz"] < 16000)
-    want = codec_repair == "on" or (codec_repair == "auto" and wall)
-    D["codec_repair"] = {"applied": False, "requested": codec_repair, "codec_wall": wall,
-                         "why": (f"cut-off {bw['cutoff_hz']} Hz with a {bw['edge_drop_db']} dB wall"
-                                 + (": low-bitrate codec, its top is sparse" if wall else ": no low-bitrate codec wall"))}
+    D["hf_texture"] = measure.hf_flatness(x, bw["cutoff_hz"])
+    fl = D["hf_texture"]["flatness"]
+    damaged = bool(bw["cutoff_hz"] < 16000 and fl < 0.15)
+    want = codec_repair == "on" or (codec_repair == "auto" and damaged)
+    D["codec_repair"] = {"applied": False, "requested": codec_repair, "codec_damage": damaged,
+                         "why": (f"cut-off {bw['cutoff_hz']} Hz ({bw['edge_drop_db']} dB edge); the band below it has a "
+                                 f"spectral flatness of {fl} at {D['hf_texture']['band_hz']} Hz (rule: cut-off below "
+                                 f"16 kHz and flatness below 0.15 = a low-bitrate codec's sparse texture; healthy bands "
+                                 f"measure 0.28-0.41)" + (": codec damage" if damaged else ": no codec damage"))}
     if want and cap["codec_repair"]:
         from . import codec
         cached = os.path.join(work, "input_repaired.wav")
