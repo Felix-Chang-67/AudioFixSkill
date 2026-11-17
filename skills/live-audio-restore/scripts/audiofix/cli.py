@@ -227,7 +227,7 @@ def _verify(a, P, rep, log):
     D = review.load_json(os.path.join(w, "diagnosis.json")) or {}
     prev = {"plan": review.load_json(os.path.join(w, "previous", "plan_used.json")),
             "verification": review.load_json(os.path.join(w, "previous", "verification.json"))}
-    items = review.material(D) + review.render(D, P, V, review.load_json(os.path.join(w, "steps.json")),
+    items = review.material(D, P) + review.render(D, P, V, review.load_json(os.path.join(w, "steps.json")),
                                                _default_plan(w), prev if prev["plan"] else None)
     review.write(os.path.join(w, "review.md"), items, "Review before delivering")
     for i in items:
@@ -413,6 +413,10 @@ def main(argv=None):
     if work:
         from . import record
         record.note_command(work, sys.argv[1:] if argv is None else list(argv), t0)
+        v = record.code_version()
+        Log(work)(f"[skill] audiofix {v['version']}, code {v['code_sha']}"
+                  + (f", git {v['git']}{' (modified)' if v.get('git_dirty') else ''}" if v.get("git") else "")
+                  + ": say this version in the delivery; a record from another version is not comparable")
     try:
         cmds[a.cmd](a)
         code = 0
@@ -422,6 +426,11 @@ def main(argv=None):
     finally:
         if work:
             record.note_command(work, [a.cmd], t0, exit_code=code)
+    if work and a.cmd in ("analyze", "restore", "auto", "verify", "investigate"):
+        try:
+            record.bundle(work, log=Log(work))      # a sandbox's work folder is gone after the chat: ship this file
+        except Exception as e:                       # noqa: BLE001 (a record must never fail a run)
+            print(f"[bundle] not written: {e}")
 
 
 def cmd_bundle(a):

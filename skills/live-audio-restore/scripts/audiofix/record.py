@@ -99,7 +99,8 @@ def bundle(work, out=None, log=print):
                 z.write(p, f)
                 n += 1
     log(f"[bundle] {out}: {n} files and record.json, {os.path.getsize(out) // 1024} KB, no audio")
-    log("[next] send this file to whoever compares runs (`audiofix.py compare THEIRS.zip MINE.zip`)")
+    log("[next] attach run_record.zip to the delivery: the work folder is gone once the chat ends, and this file is "
+        "how the run is inspected or compared later (`audiofix.py compare THEIRS.zip MINE.zip`)")
     return out
 
 
@@ -204,6 +205,8 @@ def compare(pa, pb, names=("A", "B"), out=None, log=print):
                              ("whistle lines", "tonal_lines", None),
                              ("band replication", "sbr_copies", None)):
         va, vb = _get(Da, path), _get(Db, path)
+        if path == "reference.used":                       # a path inside each run's own work folder
+            va, vb = [os.path.basename(v) if isinstance(v, str) and "/" in v else v for v in (va, vb)]
         if path == "tonal_lines":
             va, vb = len(va or []), len(vb or [])
         if path == "sbr_copies":

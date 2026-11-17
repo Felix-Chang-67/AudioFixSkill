@@ -225,7 +225,7 @@ Read it the first time you use the skill, and whenever a verdict surprises you.
 they matter most:
 
 1. **Limited or open** (`music.delimit`, `music.dynamics`, `music.macro`, `master`):
-   - A limited source (LRA < 4 LU, or PLR < 11 dB with a 3 s crest under 12.5 dB) is de-limited, gets per-stem
+   - A limited source (LRA < 4 LU with a 3 s crest under 14 dB, or PLR < 11 dB with a 3 s crest under 12.5 dB) is de-limited, gets per-stem
      peak control and a loud master.
    - An open one keeps its dynamics: light compression, the original's loudness contour put back, and a limiter
      that stays almost idle.

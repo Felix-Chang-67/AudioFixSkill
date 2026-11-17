@@ -270,3 +270,11 @@ The same audience recording was restored twice with this skill: once by Claude, 
     - Now: a song whose studio version is not found stops `analyze` (exit code 4), before the slow steps when the
       content is known. The generic profile needs `--generic-reference "<what the user said>"`, kept in
       `review.md`.
+52. **A short clip of a dynamic mix was called "limited" by its loudness range alone.**
+    - What happened: a 93 s clip of a studio mix (LRA 3.8 LU, PLR 15.3 dB, 3 s crest 17.9 dB) got the limited-source
+      settings: de-limit, drum ceiling at +11 dB, bus glue, a loud master. Its 3 s crest fell 4.5 dB and the check
+      warned. The assistant that took it over (GPT) edited five settings to undo it, one reason each, and ended 1.8 dB
+      quieter than the default; the autofix could not reach PASS either.
+    - Now: LRA under 4 LU counts only with a 3 s crest under 14 dB. The limited sources seen so far had crests of
+      10.3-11.7 dB. This song is open (crest 15.9 dB after the fix; the remaining WARN is a drum-ceiling matter).
+    - The run record named the cause at once: its first render and its WARN were identical to mine.

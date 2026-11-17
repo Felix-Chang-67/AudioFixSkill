@@ -61,7 +61,7 @@ def _music_rows(D):
     return rows
 
 
-def material(D):
+def material(D, P=None):
     items = []
     tl = _music_rows(D) if D.get("music") else []
     has_stems = bool(tl) and "vocals" in tl[0]
@@ -127,11 +127,20 @@ def material(D):
     items += missing(D)
     cr = D.get("codec_repair") or {}
     if cr.get("applied"):
-        items.append({"kind": "highs", "text": (
-            f"Low-bitrate codec damage (cut-off {D['bandwidth']['cutoff_hz']} Hz, sparse highs) was repaired with "
-            f"Apollo, and the band above the cut-off is rebuilt toward the reference's level: the top octave is "
-            f"synthesized. Say so; if the listener hears it as fake or harsh, or the vocal as digital or scattered, "
-            f"music.band_ext.below_ref_db=3 puts it 3 dB under the reference")})
+        be = ((P or {}).get("music") or {}).get("band_ext") or {}
+        if P is not None and not be.get("enabled"):
+            items.append({"kind": "highs", "text": (
+                f"Low-bitrate codec damage (cut-off {D['bandwidth']['cutoff_hz']} Hz, sparse highs) was repaired with "
+                f"Apollo, and the band above the cut-off is NOT rebuilt (music.band_ext is off): what the codec cut "
+                f"stays empty. Say so; if the listener finds it dull or closed, music.band_ext.enabled=true "
+                f"rebuilds it toward the reference's level")})
+        else:
+            items.append({"kind": "highs", "text": (
+                f"Low-bitrate codec damage (cut-off {D['bandwidth']['cutoff_hz']} Hz, sparse highs) was repaired with "
+                f"Apollo, and the band above the cut-off is rebuilt toward the reference's level: the top octave is "
+                f"synthesized. Say so; if the listener hears it as fake or harsh, or the vocal as digital or "
+                f"scattered, music.band_ext.below_ref_db=3 puts it 3 dB under the reference, and "
+                f"music.band_ext.enabled=false leaves it out")})
     return items
 
 

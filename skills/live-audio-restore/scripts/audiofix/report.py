@@ -2,6 +2,7 @@
 import numpy as np
 
 from . import SR
+from .plan import is_limited
 
 
 def _v(ok):
@@ -24,8 +25,8 @@ def diagnosis_md(D, P):
     if D["sections"]:
         out += ["", f"Music sections with their own tonal treatment (split at recording-chain changes): {D['sections']}"]
     out += ["", "## Global findings", "", "| check | measured | rule | verdict |", "|---|---|---|---|",
-            f"| loudness | {L['lufs']} LUFS, LRA {L['lra_lu']} LU | LRA < 4 LU or PLR < 11 dB = limited | "
-            f"{'limited' if (L['lra_lu'] < 4 or L['plr_db'] < 11) else 'open'} |",
+            f"| loudness | {L['lufs']} LUFS, LRA {L['lra_lu']} LU | limited: LRA < 4 LU with a 3 s crest < 14 dB, or PLR < 11 dB with a crest < 12.5 dB | "
+            f"{'limited' if is_limited(L) else 'open'} |",
             f"| peak-to-loudness | {L['plr_db']} dB (true peak {L['true_peak_dbtp']} dBTP) | | |",
             f"| clipping | {D['clipping']['flat_runs_per_min']} flat runs/min | >= 20/min | {_v(D['clipping']['flat_runs_per_min'] < 20)} |",
             f"| mains hum | {D['hum']['mains_hz']} Hz, excess {D['hum']['excess_db']} dB | fund >= 10 or 2 harm >= 8 dB | {_v(not D['hum']['present'])} |",

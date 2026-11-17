@@ -17,10 +17,14 @@ def _avg(d, keys):
 
 
 def is_limited(L):
-    """A limiter or heavy compression on the source: loudness range under 4 LU, or a peak-to-loudness ratio under 11 dB
-    together with a 3 s crest under 12.5 dB. PLR alone took a dense but unlimited live song (PLR 10.9, crest 13.6,
-    LRA 6.7; the de-limiter found 0.1 dB of limiting) for a limited one and flattened it to 3.1 LU."""
-    return L["lra_lu"] < 4 or (L["plr_db"] < 11 and L.get("crest3s_db", 0.0) < 12.5)
+    """A limiter or heavy compression on the source: a loudness range under 4 LU together with a 3 s crest under 14 dB,
+    or a peak-to-loudness ratio under 11 dB together with a 3 s crest under 12.5 dB. PLR alone took a dense but
+    unlimited live song (PLR 10.9, crest 13.6, LRA 6.7; the de-limiter found 0.1 dB of limiting) for a limited one and
+    flattened it to 3.1 LU. LRA alone took a 93 s clip of a dynamic studio mix (LRA 3.8, PLR 15.3, crest 17.9) for a
+    limited one: a short clip has little loudness range whatever was done to it. The limited sources seen so far had
+    crests of 10.3-11.7 dB."""
+    crest = L.get("crest3s_db", 0.0)
+    return (L["lra_lu"] < 4 and crest < 14.0) or (L["plr_db"] < 11 and crest < 12.5)
 
 
 def build(D):
@@ -89,7 +93,7 @@ def build(D):
         dyn = f"LRA {L['lra_lu']} LU, peak-to-loudness {L['plr_db']} dB"
         if limited and cap["delimiter"]:
             M["delimit"] = {"enabled": True, "depth": 2.0 if heavy else 1.5,
-                            "why": f"{dyn}: {'heavily ' if heavy else ''}limited (rule: LRA < 4, or PLR < 11 with a 3 s crest < 12.5; "
+                            "why": f"{dyn}: {'heavily ' if heavy else ''}limited (rule: LRA < 4 with a 3 s crest < 14, or PLR < 11 with a 3 s crest < 12.5; "
                                    f"depth 2 if LRA < 2 or PLR < 9.5)"}
         else:
             M["delimit"] = {"enabled": False,
