@@ -106,7 +106,7 @@ highly: they reward "clean", not "the words are still there". Do not use them he
 | `ltass` | No vocal statistics in the profile | The long-term speech spectrum (approximately after Byrne et al. 1994, converted to power density) |
 
 For a talk-only file from a show whose songs you also have, restore a song first and point the MC at its curve:
-`--set speech.match.target=song_vocal speech.match.chain_file=SONGWORK/vocal_eq.json`.
+`--set speech.match.target=song_vocal speech.match.chain_file=SONGWORK/vocal_eq.json --why "same show as SONGWORK"`.
 
 **Why the speech spectrum below 250-400 Hz.** People speak lower than they sing. A studio vocal (singing) is nearly
 empty below 200 Hz: -15 dB at 160 Hz and -24 dB at 125 Hz against its 300-1000 Hz level. A speaking voice has its

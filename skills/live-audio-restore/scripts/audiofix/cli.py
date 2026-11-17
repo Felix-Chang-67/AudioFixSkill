@@ -1,8 +1,9 @@
-"""Command line: check | profile | analyze | restore | verify | auto. Run `python3 scripts/audiofix.py -h`."""
-import argparse, json, os, sys
+"""Command line: check | profile | analyze | restore | verify | auto | investigate | bundle | compare.
+Run `python3 scripts/audiofix.py -h`."""
+import argparse, json, os, sys, time
 
-from . import (__version__, analysis, audio_io, delimit, pipeline, plan as PL, profiles, reference, report, review,
-               stems, verify)
+from . import (__version__, analysis, audio_io, delimit, pipeline, plan as PL, profiles, ready, reference, report,
+               review, stems, verify)
 
 
 class Log:
@@ -19,6 +20,8 @@ class Log:
 def cmd_check(a):
     cap = analysis.capabilities()
     print(json.dumps(cap, indent=1))
+    rep = ready.check(cap)                                   # loads every model, downloading it once if needed
+    miss = [k for k, v in rep.items() if not v["ok"]]
     missing = {"ffmpeg": "decode m4a/mp3/video audio, AAC export, stationary denoise, declip: install ffmpeg",
                "stems": "stem separation (needed for the full music and MC paths): pip install demucs torch",
                "delimiter": "neural de-limiting: run scripts/setup.sh (clones De-limiter, installs asteroid deps)",
@@ -33,6 +36,34 @@ def cmd_check(a):
     print(f"compute device for Apollo and demucs: {device.describe()}"
           + ("" if device.pick() != "cpu" else "  (codec repair: about 6x real time; set AUDIOFIX_DEVICE to force one)"))
     print("profiles:", profiles.available_profiles())
+    for k, v in rep.items():
+        print(f"{'READY' if v['ok'] else 'NOT READY'} {k}: {v['detail']}")
+    if miss:
+        print(ready.stop_text(miss, rep))
+        sys.exit(3)
+    print("[ok] every part of the full pipeline is installed and its model is on disk")
+
+
+def _require(a, log):
+    """Stop unless every part of the full pipeline is ready, or the user agreed to less (--degraded)."""
+    rep = ready.check()
+    miss = [k for k, v in rep.items() if not v["ok"]]
+    if getattr(a, "no_stems", False) and "stems" not in miss:
+        miss.append("stems")
+        rep["stems"] = {"ok": False, "detail": "skipped with --no-stems"}
+    if not miss:
+        return None
+    if not getattr(a, "degraded", None):
+        log(ready.stop_text(miss, rep))
+        sys.exit(3)
+    log(f"[degraded] running without {', '.join(miss)}, as agreed: {a.degraded}")
+    if "stems" in miss:
+        a.no_stems = True
+    if "codec_repair" in miss:
+        a.codec_repair = "off"
+    if "asr" in miss:
+        os.environ["AUDIOFIX_NO_ASR"] = "1"
+    return {"missing": miss, "why": a.degraded, "detail": {k: rep[k]["detail"] for k in miss}}
 
 
 def cmd_profile(a):
@@ -59,11 +90,14 @@ def _analyze(a, log):
         os.environ["AUDIOFIX_ASR_LANG"] = a.language
     if getattr(a, "asr_model", None):
         os.environ["AUDIOFIX_ASR_MODEL"] = a.asr_model
+    degraded = _require(a, log)
     D = analysis.run(a.input, a.work, a.content, a.music_profile, a.speech_profile, not a.no_stems, log,
                      codec_repair=getattr(a, "codec_repair", "auto"),
-                     lookup={"artist": a.artist, "title": a.title, "country": a.country, "lookup": not a.no_lookup})
+                     lookup={"artist": a.artist, "title": a.title, "country": a.country, "lookup": not a.no_lookup},
+                     degraded=degraded)
     P = PL.build(D)
     PL.save(P, os.path.join(a.work, "plan.json"))
+    PL.save(P, os.path.join(a.work, "plan_default.json"))   # what the rules decided; every difference needs a reason
     with open(os.path.join(a.work, "diagnosis.md"), "w") as fh:
         fh.write(report.diagnosis_md(D, P))
     try:
@@ -113,9 +147,49 @@ def _keep_previous(work, log):
     log(f"[restore] the previous render is kept in {prev}")
 
 
+def _default_plan(work):
+    return review.load_json(os.path.join(work, "plan_default.json")) or review.load_json(os.path.join(work, "plan.json"))
+
+
+def _reasons(a, P, log):
+    """Every setting that differs from what the rules decided needs its reason (--why). Hand-tuned plans made results
+    depend on the assistant, and an edit nobody can explain cannot be judged or undone."""
+    why = (getattr(a, "why", None) or "").strip()
+    if a.set and not why:
+        log("[stop] --set needs --why \"<the reason>\": the measurement, the WARN or the listener's words that call for "
+            "this edit. Every edit to the default plan is listed with its reason in review.md and the delivery")
+        sys.exit(2)
+    reasons = dict(P.get("edit_reasons") or {})
+    for s in a.set or []:
+        reasons[s.split("=", 1)[0]] = why
+    base = _default_plan(a.work)
+    diff = review.plan_diff(base, P) if base else {}
+    if why:
+        for k in diff:
+            reasons.setdefault(k, why)
+    reasons = {k: v for k, v in reasons.items() if k in diff}
+    unexplained = [k for k in diff if not reasons.get(k)]
+    if unexplained:
+        log(f"[stop] these settings differ from the default plan (plan_default.json) with no reason given: "
+            f"{', '.join(unexplained)}. Run again with --why \"<the reason>\", or put them back")
+        sys.exit(2)
+    P["edit_reasons"] = reasons
+    for k, r in reasons.items():
+        log(f"[edit] {k} = {json.dumps(_get(P, k))}: {r}")
+    return P
+
+
+def _get(P, key):
+    node = P
+    for k in key.split("."):
+        node = node.get(k) if isinstance(node, dict) else None
+    return node
+
+
 def _restore(a, log):
     P = PL.load(a.plan or os.path.join(a.work, "plan.json"))
     P = PL.override(P, a.set)
+    P = _reasons(a, P, log)
     _keep_previous(a.work, log)
     PL.save(P, os.path.join(a.work, "plan_used.json"))
     out, rep = pipeline.restore(a.work, P, log)
@@ -134,8 +208,7 @@ def _verify(a, P, rep, log):
     prev = {"plan": review.load_json(os.path.join(w, "previous", "plan_used.json")),
             "verification": review.load_json(os.path.join(w, "previous", "verification.json"))}
     items = review.material(D) + review.render(D, P, V, review.load_json(os.path.join(w, "steps.json")),
-                                               review.load_json(os.path.join(w, "plan.json")),
-                                               prev if prev["plan"] else None)
+                                               _default_plan(w), prev if prev["plan"] else None)
     review.write(os.path.join(w, "review.md"), items, "Review before delivering")
     for i in items:
         log(f"[review] {i['kind']}: {i['text']}")
@@ -178,12 +251,13 @@ def _autofix(a, V, P, log):
     fixes = review.autofix(V, P, review.load_json(os.path.join(a.work, "steps.json")), explicit)
     if not fixes:
         return V
-    sets = []
+    sets, whys = [], []
     for fx, why in fixes:
         sets += [f"{k}={json.dumps(v)}" for k, v in fx.items()]
+        whys.append(why)
         log(f"[autofix] {why}: " + ", ".join(f"{k}={v}" for k, v in fx.items()) + "; re-rendering once")
     b = argparse.Namespace(**vars(a))
-    b.plan, b.set = os.path.join(a.work, "plan_used.json"), sets
+    b.plan, b.set, b.why = os.path.join(a.work, "plan_used.json"), sets, "autofix: " + "; ".join(whys)
     P2, rep2 = _restore(b, log)
     V2 = _verify(b, P2, rep2, log)
     if _warns(V2) >= _warns(V):
@@ -262,7 +336,11 @@ def main(argv=None):
         q.add_argument("--no-lookup", action="store_true",
                        help="do not look the studio version up online; use --music-profile or the default")
         q.add_argument("--speech-profile", default="speech_ltass")
-        q.add_argument("--no-stems", action="store_true", help="skip stem separation (mix-only fallbacks)")
+        q.add_argument("--no-stems", action="store_true",
+                       help="skip stem separation (mix-only fallbacks); allowed only with --degraded")
+        q.add_argument("--degraded", metavar="WHY",
+                       help="run without the parts check reports missing, after the user agreed: what failed to "
+                            "install and that the user accepts a reduced result (shown in review.md)")
         q.add_argument("--language", help="spoken language for Whisper, e.g. ja, en, zh (default: detect)")
         q.add_argument("--asr-model", help="faster-whisper model: tiny, base, small (default), medium, large-v3")
         q.add_argument("--codec-repair", choices=["auto", "on", "off"], default="auto",
@@ -274,6 +352,8 @@ def main(argv=None):
     r.add_argument("--work", required=True)
     r.add_argument("--plan")
     r.add_argument("--set", nargs="*", help="edits like music.delimit.depth=1.5 speech.crowd.enabled=false")
+    r.add_argument("--why", help="the reason for the edits (required with --set, and for hand edits of plan.json): "
+                                 "the measurement, WARN or listener's words that call for them")
     r.add_argument("--no-verify", action="store_true")
     r.add_argument("--no-autofix", action="store_true", help="do not fix a WARN automatically (see review.md)")
     r.add_argument("--no-plots", action="store_true")
@@ -289,11 +369,47 @@ def main(argv=None):
     au = sub.add_parser("auto", help="analyze + restore + verify in one go")
     common(au)
     au.add_argument("--set", nargs="*")
+    au.add_argument("--why", help="the reason for the --set edits (required with --set)")
     au.add_argument("--no-autofix", action="store_true", help="do not fix a WARN automatically (see review.md)")
     au.add_argument("--no-plots", action="store_true")
+    bu = sub.add_parser("bundle", help="pack a work folder's record (commands, diagnosis, plans and edit reasons, "
+                                       "step ledger, checks, review, skill version, machine) into a small zip, no audio")
+    bu.add_argument("--work", required=True)
+    bu.add_argument("--out", help="zip path (default WORK/run_record.zip)")
+    co = sub.add_parser("compare", help="two runs (bundles or work folders) side by side, and where they first part")
+    co.add_argument("a")
+    co.add_argument("b")
+    co.add_argument("--names", default="A,B", help="labels, e.g. GPT,Claude")
+    co.add_argument("--out", help="write the comparison as Markdown here")
     a = ap.parse_args(argv)
-    {"check": cmd_check, "profile": cmd_profile, "analyze": cmd_analyze, "restore": cmd_restore,
-     "verify": cmd_verify, "auto": cmd_auto, "investigate": cmd_investigate}[a.cmd](a)
+    cmds = {"check": cmd_check, "profile": cmd_profile, "analyze": cmd_analyze, "restore": cmd_restore,
+            "verify": cmd_verify, "auto": cmd_auto, "investigate": cmd_investigate, "bundle": cmd_bundle,
+            "compare": cmd_compare}
+    work = getattr(a, "work", None) if a.cmd not in ("bundle", "compare", "profile") else None
+    t0, code = time.time(), 1
+    if work:
+        from . import record
+        record.note_command(work, sys.argv[1:] if argv is None else list(argv), t0)
+    try:
+        cmds[a.cmd](a)
+        code = 0
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else 1
+        raise
+    finally:
+        if work:
+            record.note_command(work, [a.cmd], t0, exit_code=code)
+
+
+def cmd_bundle(a):
+    from . import record
+    record.bundle(a.work, a.out)
+
+
+def cmd_compare(a):
+    from . import record
+    names = (a.names.split(",") + ["B"])[:2]
+    record.compare(a.a, a.b, names=tuple(names), out=a.out)
 
 
 if __name__ == "__main__":

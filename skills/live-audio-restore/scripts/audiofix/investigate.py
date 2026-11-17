@@ -6,7 +6,7 @@ already knows how.
    ledger. The evidence is ranked.
 3. One variant per likely cause is rendered, each changing one setting, and a listening file plays the current render
    and every variant, passage by passage. investigate.md says what each variant changed and what it measured.
-4. The listener chooses; the chosen settings are applied with `restore --set`.
+4. The listener chooses; the chosen settings are applied with `restore --set ... --why "<their choice>"`.
 
 The assistant that only mapped words to a knob changed the wrong thing, or nothing, until it was told the cause. The
 one that investigated found, for a "digital feel", 15 steady whistles that the original had 4 of."""
@@ -265,7 +265,7 @@ def _link_inputs(work, sub):
     os.makedirs(sub, exist_ok=True)
     skip = {"restored.wav", "restored.m4a", "AB.wav", "compare.png", "verification.md", "verification.json",
             "master.json", "steps.json", "review.md", "plan_used.json", "log.txt", "vocal_eq.json", "previous",
-            "autofix_rejected", "investigate"}
+            "autofix_rejected", "investigate", "commands.jsonl", "run_record.zip", "apollo_chunks"}
     for name in os.listdir(work):
         if name in skip or name.startswith("."):
             continue
@@ -315,7 +315,9 @@ def run(work, complaint, render=True, max_variants=3, log=print):
             sets = [f"{k}={json.dumps(val)}" for k, val in v["set"].items()]
             cmd = [sys.executable, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                                 "audiofix.py"), "restore", "--work", sub, "--plan",
-                   os.path.join(work, "plan_used.json"), "--no-autofix", "--no-plots", "--set"] + sets
+                   os.path.join(work, "plan_used.json"), "--no-autofix", "--no-plots",
+                   "--why", f"investigate variant {i} for '{complaint}': {v['label']} (tests: {v['why']})",
+                   "--set"] + sets
             log(f"[investigate] rendering variant {i}: {v['label']} ({', '.join(sets)})")
             procs.append(subprocess.Popen(cmd, stdout=open(os.path.join(out_dir, f"v{i}.log"), "w"),
                                           stderr=subprocess.STDOUT))
@@ -334,7 +336,8 @@ def run(work, complaint, render=True, max_variants=3, log=print):
     _write(work, complaint, cats, found, variants, out_dir, getattr(c, "where", None))
     log(f"[next] send {os.path.join(out_dir, 'ABC.wav')} with the order in investigate.md (current render, then each "
         f"variant). Tell the listener the evidence for each hypothesis in plain words, ask which version is best, then "
-        f"apply its settings with restore --work {work} --set ... (investigate.md lists them)")
+        f"apply its settings with restore --work {work} --set ... --why \"the listener chose version N: ...\" "
+        f"(investigate.md lists them)")
     return found, variants
 
 
@@ -418,7 +421,8 @@ def _write(work, complaint, cats, found, variants, out_dir, where=None):
         L += ["", "Full-length versions: `investigate/v<number>/restored.wav` (and .m4a); version 0 is `restored.wav`."]
     L += ["", "## Next", "", "1. Send ABC.wav. Tell the listener, in plain words, which causes the measurements point "
           "to and what each version changes.", "2. Ask which version sounds best, or whether none fixes it.",
-          f"3. Apply the chosen settings: `restore --work {work} --set <settings>` and deliver as usual.",
+          f"3. Apply the chosen settings: `restore --work {work} --set <settings> --why \"the listener chose "
+          f"version N: <their words>\"` and deliver as usual.",
           "4. If none helps, ask what exactly they hear (where, which instrument) and run investigate again with "
           "their words."]
     with open(os.path.join(out_dir, "investigate.md"), "w") as fh:

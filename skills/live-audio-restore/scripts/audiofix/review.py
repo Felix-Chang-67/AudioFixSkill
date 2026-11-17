@@ -138,6 +138,13 @@ def missing(D):
     items = []
     cap = D.get("capabilities") or {}
     mu = D.get("music")
+    dg = D.get("degraded")
+    if dg:
+        items.append({"kind": "missing", "text": (
+            f"Run with --degraded ({dg.get('why')}): without {', '.join(dg.get('missing') or [])}. The skill requires "
+            f"the full install; this reduced run is acceptable only because the user agreed. Say again in the "
+            f"delivery what the result lacks (the items below), and that a machine where bash scripts/setup.sh "
+            f"works gives the full restoration")})
     if mu and not D.get("stems_dir"):
         items.append({"kind": "missing", "text": (
             "No stem separation (demucs + PyTorch not installed, or --no-stems): the vocal, drums, bass and guitars "
@@ -273,9 +280,11 @@ def render(D, P, V, steps=None, default_plan=None, prev=None):
                 f"instrument and not bleed or crowd")})
     if default_plan is not None:
         d = plan_diff(default_plan, P)
+        why = P.get("edit_reasons") or {}
         if d:
-            items.append({"kind": "edits", "text": "Edits to the default plan (each needs its reason in the delivery): "
-                          + "; ".join(f"{k}: {a} -> {b}" for k, a, b in ((k, *v) for k, v in d.items()))})
+            items.append({"kind": "edits", "text": "Edits to the default plan, each with the reason given for it "
+                          "(--why); state each in the delivery: " + "; ".join(
+                              f"{k}: {a} -> {b} (reason: {why.get(k, 'none recorded')})" for k, (a, b) in d.items())})
     if prev:
         pp, pv = prev.get("plan"), prev.get("verification")
         if pp is not None:

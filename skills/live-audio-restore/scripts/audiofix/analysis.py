@@ -1,5 +1,5 @@
 """Diagnosis: measure everything the plan rules need, globally and per content class (music / speech)."""
-import json, os, time
+import json, os, shutil, time
 import numpy as np
 
 from . import SR, audio_io, delimit, dsp, loudness, measure, profiles, reference, segments, stems as S
@@ -33,7 +33,7 @@ def cat_frames(act, regs, hop):
 
 
 def run(input_path, work, content="auto", music_profile=None, speech_profile="speech_ltass",
-        use_stems=True, log=print, codec_repair="auto", lookup=None):
+        use_stems=True, log=print, codec_repair="auto", lookup=None, degraded=None):
     """music_profile None: the studio version of this song, looked up online from the tags or lookup's
     artist / title (see reference.py), else the bundled default. lookup: {artist, title, country, lookup}."""
     os.makedirs(work, exist_ok=True)
@@ -47,6 +47,8 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
     D = {"input": os.path.abspath(input_path), "work": os.path.abspath(work), "source": src,
          "duration_s": round(n / SR, 2), "capabilities": cap, "content_hint": content,
          "profiles": {"music": music_profile or reference.DEFAULT, "speech": speech_profile}}
+    if degraded:
+        D["degraded"] = degraded
     log(f"[analyze] {n / SR:.1f} s, {src.get('codec')} {src.get('bit_rate', 0) // 1000} kb/s; capabilities {cap}")
     if music_profile:
         D["reference"] = {"auto": False, "used": music_profile, "why": "chosen with --music-profile"}
@@ -99,8 +101,11 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
             log(f"[analyze] codec repair with Apollo on {device.describe()}"
                 + (f" (about {6 * n / SR / 60:.0f} min on the CPU)" if dev == "cpu" else "") + " ...")
             t1 = time.time()
-            xr = codec.repair(x, log=log)
-            audio_io.save_wav(cached, xr, bits=32)
+            chunks = os.path.join(work, "apollo_chunks")       # a run cut off part way resumes from here
+            xr = codec.repair(x, log=log, checkpoint=chunks)
+            audio_io.save_wav(cached + ".tmp.wav", xr, bits=32)
+            os.replace(cached + ".tmp.wav", cached)
+            shutil.rmtree(chunks, ignore_errors=True)
             D["codec_repair"]["seconds"] = round(time.time() - t1)
         D["codec_repair"].update(applied=True, model="apollo")
         x, wav = xr, cached

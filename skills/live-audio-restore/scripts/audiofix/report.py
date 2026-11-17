@@ -71,7 +71,7 @@ def diagnosis_md(D, P):
         out += ["", "## Speech (MC)", "", f"- {sp['duration_s']} s; loudness {sp['loudness']}",
                 f"- {sp['metrics']}",
                 f"- Voice vs speech spectrum: RMS deviation {sp['tonal']['rms_db']} dB; by band {sp['tonal']['by_band']}"]
-    out += ["", "## Plan (edit plan.json, or pass --set key=value to restore)", ""]
+    out += ["", "## Plan (pass --set key=value --why \"<reason>\" to restore; every edit needs its reason)", ""]
     for part in ("repair", "music", "speech"):
         if not P.get(part):
             continue

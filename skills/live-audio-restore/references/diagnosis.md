@@ -64,7 +64,7 @@ The measure counts runs of two or more identical samples within 0.3 dB of the fi
 - **20 or more per minute = digital clipping.** If ffmpeg is available, the mix goes through ffmpeg `adeclip` before
   anything else.
 - Lossy codecs smear flat tops, so a broadcast rip of a clipped source can read low. If the user hears crackle on
-  loud hits and the count is low, force it with `--set repair.declip.enabled=true`.
+  loud hits and the count is low, force it with `--set repair.declip.enabled=true --why "..."`.
 - A broadcast limiter piles samples up near its ceiling without making flat runs. That is limiting, not clipping.
 
 ### Mains hum

@@ -8,7 +8,8 @@ Change one thing at a time, re-render, and send a new `AB.wav`. Overrides go on 
 `plan_used.json`) or into `plan.json`:
 
 ```bash
-python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.delimit.depth=1.5
+python3 scripts/audiofix.py restore --work WORK --set music.match.hi_db=3 music.delimit.depth=1.5 \
+  --why "the listener: boomy and pumping"      # required: restore refuses an edit without its reason
 ```
 
 ## Songs

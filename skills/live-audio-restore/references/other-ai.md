@@ -23,48 +23,53 @@ packages and reach the internet.
 Tools that support Agent Skills folders (a `SKILL.md` with `name`/`description` frontmatter, plus `scripts/` and
 `references/`) can load `skills/live-audio-restore/` directly as a skill.
 
-## ChatGPT with code execution (Advanced Data Analysis / Code Interpreter) and similar sandboxes
+## The full install is required
 
-These sandboxes usually have numpy, scipy and matplotlib, but **no internet**, often no ffmpeg, and no
-torch/demucs/numba.
+`analyze` and `auto` refuse to run (exit code 3) until every part is installed and its model is on disk: ffmpeg,
+demucs + PyTorch, the De-limiter, Apollo and faster-whisper. `bash scripts/setup.sh` installs them all and downloads
+the models; `check` must then end with `[ok] every part of the full pipeline is installed and its model is on disk`.
 
-1. Upload the repository as a zip, and the audio as **WAV** (no ffmpeg means no m4a/mp3 decoding).
-2. Tell the assistant:
-   > Unzip the repo, read `skills/live-audio-restore/SKILL.md` and follow it. Run
-   > `python3 skills/live-audio-restore/scripts/audiofix.py check`, then
-   > `auto my.wav --work out --no-stems` (add `--content speech` if it is an MC / talk). Explain
-   > `out/diagnosis.md` and `out/verification.md` to me and give me `out/restored.wav` and `out/AB.wav`.
+Why it is enforced: an assistant in a sandbox without PyTorch delivered a song with no stem separation and no codec
+repair (the vocal exactly as wide as in the original, the codec's 9-13 kHz holes kept) and never said so. The same
+song restored with every part sounded clearly better. Assistants that can install packages did so once they were
+told it was required.
 
-   Without stems, songs and talk cannot be told apart automatically: the drum and bass stems are what separates
-   them, and Whisper alone cannot, because lyrics are words too. Tell the assistant which it is.
-
-   `review.md` lists everything the sandbox could not do as `missing` items: no stems, no codec repair, no studio
-   version. The assistant should tell you each one.
-
-   Without internet, the studio version of the song cannot be looked up either, and the tone is matched to the
-   bundled generic profile. For a song, the assistant should ask you for the studio version: a WAV copy of the
-   track, or of any 30 s of it. Then it builds the reference first:
-   > `profile --name song --files studio.wav --song --no-stems --out song.json`, then
-   > `auto my.wav --work out --content music --no-stems --music-profile song.json`.
-3. What still works without stems, models and numba:
-   - all measurements and the plan;
-   - polarity repair and tone match on the whole mix;
-   - band extension;
-   - the perceptual loudness and limiter (vectorised, slower);
-   - verification and A/B.
-
-   Without stems there is no per-instrument work. Speech uses the voicing detector and the whole mix. Expect a
-   clearly smaller improvement than the full pipeline: run the full version locally when you can.
-
-   Codec repair (Apollo) is missing there too. On low-bitrate rips, the rebuilt highs then keep the codec's sparse,
-   metallic texture. The noise-like half of the band extension softens this, but cannot replace the repair.
+- **ChatGPT with code execution and similar sandboxes.** Install everything first: run `setup.sh`, or the `pip
+  install` lines in it one by one, and get ffmpeg (a static build, or `imageio-ffmpeg`'s binary on the PATH). If a
+  step fails, read the error and fix it; a CPU-only PyTorch is enough.
+- **If an install truly fails** (no internet at all, a package with no build for this platform): tell the user which
+  part failed and what the result will lack (`check` prints both). Only with their agreement run with
+  `--degraded "<what failed; the user agreed>"`. `review.md` then lists every missing step, and the delivery repeats
+  it. Never use `--no-stems` or `--codec-repair off` to save time.
+- **No internet for the studio version** (the lookup failed, but the parts are installed): ask the user for the
+  studio version, a copy of the track or any 30 s of it, and build the reference first:
+  > `profile --name song --files studio.m4a --song --out song.json`, then
+  > `auto my.m4a --work out --content music --music-profile song.json`.
 
 ## Long jobs
 
 Codec repair runs at about 6x real time on the CPU: a 5 min song takes about 30 min. It uses an NVIDIA or Apple
-silicon GPU automatically when there is one (`check` shows which), and is then much faster. Assistants with short tool
-time-outs should start `analyze` in the background, or ask the user to run it, and continue from the work folder.
-`input_repaired.wav` is cached, so a rerun does not repeat it.
+silicon GPU automatically when there is one (`check` shows which), and is then much faster.
+
+- Assistants with short tool time-outs: start `analyze` or `auto` in the background
+  (`nohup python3 scripts/audiofix.py auto ... > run.out 2>&1 &`) and follow `WORK/log.txt`, which prints every
+  10 s chunk with the time left.
+- If the command is cut off anyway, run the same command again. Every finished chunk is saved in
+  `WORK/apollo_chunks/`, and the run resumes from the last one. `input_repaired.wav` is cached once complete, so a
+  rerun does not repeat it. `commands.jsonl` shows a command that was cut off (a start with no end).
+
+## Edits need their reasons
+
+`restore --set key=value` needs `--why "<the measurement, WARN or listener's words>"`, and so does a hand edit of
+`plan.json`: every setting that differs from `plan_default.json` must have a reason, or `restore` stops (exit code 2).
+The reasons are kept in `plan_used.json` (`edit_reasons`) and listed in `review.md`.
+
+## The run's record
+
+After delivering, `bundle --work out` packs `out/run_record.zip`: every command, the diagnosis, the plans with the
+edit reasons, the step ledger, the checks, the review, the skill version and the machine's parts. No audio. When the
+user wants a result compared with another assistant's, the two records go into
+`compare THEIRS.zip MINE.zip --names X,Y`, which names the first place they part.
 
 ## Chat-only assistants (no code execution)
 
@@ -74,8 +79,8 @@ Run the tool yourself and let the assistant interpret:
    `python3 scripts/audiofix.py analyze my_file --work out`.
 2. Paste `out/diagnosis.md` and `out/plan.json` into the chat with `references/diagnosis.md` and
    `references/tuning.md`, and ask for a review of the plan.
-3. Apply the suggested edits:
-   `python3 scripts/audiofix.py restore --work out --set ...`.
+3. Apply the suggested edits, with the assistant's reason:
+   `python3 scripts/audiofix.py restore --work out --set ... --why "..."`.
 4. Paste `out/verification.md` back. Listen to `out/AB.wav` and describe what you hear; the assistant maps your words
    to knobs with `references/tuning.md`.
 
@@ -85,11 +90,14 @@ Paste this as the system or project instructions, and attach `SKILL.md` and the 
 
 ```
 You restore low-quality live recordings (songs, MC/stage talk, or both) using the "live-audio-restore" skill.
-Follow SKILL.md: understand the material, choose a reference profile (for a song, its own studio version: auto
-finds it when online; offline, ask the user to upload it), run analyze, read diagnosis.md, review
-plan.json, run restore, read verification.md, deliver restored.wav + AB.wav with a plain-language explanation,
-then, when the listener says something sounds wrong, run `audiofix.py investigate --work out --complaint "<their
-words>"` and send its investigate/ABC.wav instead of guessing a knob. You cannot hear audio: every claim must come from
+Follow SKILL.md. First install everything (bash scripts/setup.sh) until `audiofix.py check` ends with [ok]; the
+skill refuses to run otherwise, and you never work around that without the user's agreement (--degraded). Then:
+understand the material, choose a reference profile (for a song, its own studio version: auto finds it when online;
+offline, ask the user to upload it), run analyze, read diagnosis.md, review plan.json, run restore, read
+verification.md and review.md, deliver restored.wav + AB.wav with a plain-language explanation that answers every
+review item, then run `audiofix.py bundle --work out` and keep run_record.zip. Every edit needs its reason:
+`restore --set ... --why "..."`. When the listener says something sounds wrong, run `audiofix.py investigate --work
+out --complaint "<their words>"` and send its investigate/ABC.wav instead of guessing a knob. You cannot hear audio: every claim must come from
 the verification numbers or the user's ears. Never use neural denoisers on live speech, never add fake stereo to
 mono, never pick a loudness target the limiter can only reach by squashing. If you cannot run code, ask the user
 to run the commands and paste the reports.
@@ -101,5 +109,5 @@ to run the commands and paste the reports.
 bash scripts/setup.sh
 python3 scripts/audiofix.py auto song.m4a --work out --content music   # finds the song's studio version online
 # read out/diagnosis.md and out/verification.md, listen to out/AB.wav, then tweak:
-python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3
+python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3 --why "too boomy"
 ```

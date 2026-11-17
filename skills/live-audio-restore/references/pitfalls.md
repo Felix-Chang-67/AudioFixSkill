@@ -245,3 +245,21 @@ The same audience recording was restored twice with this skill: once by Claude, 
       - The codec repair leaves them in, and the restoration made one 13 dB more prominent.
     - Now: the shift is found by correlating the highs with the low band. In each frame, a peak in the copied band
       whose source peaks too is cut to its surroundings, on the mix and every stem.
+48. **A reduced pipeline was delivered as if it were the full one.**
+    - What happened: an assistant in a sandbox without PyTorch ran the skill as it degraded: no stem separation, no
+      codec repair. Its song kept the original's stereo width (-7.4 against -7.3 dB) and the codec's 9-13 kHz holes,
+      and the delivery did not say so. Told that the parts were required, assistants installed them.
+    - Now: `analyze` and `auto` stop (exit code 3) until every part is installed and its model is on disk, and print
+      how to install it. A reduced run needs `--degraded "<why>"` after the user agreed, and `review.md` lists what it
+      lacks. `check` (run by `setup.sh`) downloads every model, so later sessions work offline.
+49. **A 30-minute codec repair could not finish under a tool time-out.**
+    - What happened: Apollo saved nothing until the whole song was done. On the CPU, about 6x real time, a command
+      cut off by an assistant's time-out started from zero again each time.
+    - Now: every 10 s chunk is saved in `apollo_chunks/`, and running the same command again resumes from the last
+      one. A run killed after two of three chunks, then resumed, matched an uninterrupted run sample for sample.
+50. **Hand edits arrived without reasons, and other assistants' runs could only be guessed from their audio.**
+    - What happened: two assistants hand-tuning the same song ended 3 dB apart in loudness. Each analysis of another
+      assistant's result was inferred from the finished file: which steps ran and what was changed were unknown.
+    - Now: every setting that differs from `plan_default.json` needs `--why`, or `restore` stops (exit code 2); the
+      reasons are kept in `plan_used.json` and listed in `review.md`. `commands.jsonl` records every command, and
+      `bundle` packs the run's text record (no audio). `compare` lines two records up and names where they part.

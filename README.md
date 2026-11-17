@@ -68,7 +68,7 @@
 ```bash
 git clone https://github.com/Felix-Chang-67/AudioFixSkill.git
 cd AudioFixSkill/skills/live-audio-restore
-bash scripts/setup.sh          # 装好缺的东西，最后自动运行 check
+bash scripts/setup.sh          # 必须运行：装好全部组件并下载模型，最后自动运行 check
 ```
 
 - **必需**：Python 3.9+。**推荐**安装 ffmpeg。
@@ -80,9 +80,10 @@ bash scripts/setup.sh          # 装好缺的东西，最后自动运行 check
   | demucs + PyTorch | 音轨分离，分成人声/鼓/贝斯/其他 |
   | De-limiter | 神经网络去压限 |
   | faster-whisper | 用词级时间戳定位 MC 讲话，并做可懂度检查 |
-  | Apollo（可选） | 修复低码率编码造成的高频损伤，让高频不再发假发刺。有 NVIDIA 显卡（CUDA）或 Apple 芯片（MPS）时自动用显卡，快很多；显卡出错会自动退回 CPU。只用 CPU 约为音频时长的 6 倍，5 分钟的歌约半小时 |
+  | Apollo | 修复低码率编码造成的高频损伤，让高频不再发假发刺。有 NVIDIA 显卡（CUDA）或 Apple 芯片（MPS）时自动用显卡，快很多；显卡出错会自动退回 CPU。只用 CPU 约为音频时长的 6 倍，5 分钟的歌约半小时 |
 
-- **缺组件时**：缺哪个就自动降级。`python3 scripts/audiofix.py check` 会告诉你少了什么、会影响什么。
+- **必须装全**：`check` 要显示每个组件都 READY。缺任何一个，`analyze` / `auto` 都会停下（退出码 3），并告诉你怎么装、缺了会怎样。不能用 `--no-stems` 之类的办法绕过；实在装不上，AI 必须先告诉你缺什么，你同意后才能加 `--degraded "原因"` 跑一个缩水版。
+- **长任务可以续跑**：Apollo 在 CPU 上约为音频时长的 6 倍。每处理完 10 秒就存一次，中途被打断（比如 AI 的命令超时），再运行同一条命令就从断点接着跑。
 - **测试环境**：Python 3.13、torch 2.15、demucs 4.1.0、faster-whisper 1.2.1、numpy 2.5、scipy 1.18、ffmpeg 6.1。
 - **只用 CPU**：可以先装 CPU 版 PyTorch，省磁盘空间。
 
@@ -107,6 +108,9 @@ python3 scripts/audiofix.py auto 整场.m4a --work out                   # 歌�
 | `previous/` | 上一次渲染的结果、方案和检查，用来对比 |
 | `autofix_rejected/` | 自动修复没有减少警告时，被放弃的那一版 |
 | `plan.json` | 修复计划，每一步都有 `why` |
+| `plan_default.json` | 规则自动决定的方案；渲染时用的方案（`plan_used.json`）里每一处不同都带着理由 |
+| `commands.jsonl` | 在这个文件夹上跑过的每条命令、skill 版本和退出码 |
+| `run_record.zip` | 运行 `bundle` 后生成：整次运行的文字记录，不含音频 |
 | `restored.wav` | 修复结果，24-bit / 44.1 kHz |
 | `restored.m4a` | AAC 256k 副本，方便手机听 |
 | `verification.md` | 验证报告：每项检查 PASS/WARN，附修复前后数字 |
@@ -119,7 +123,7 @@ python3 scripts/audiofix.py auto 整场.m4a --work out                   # 歌�
 python3 scripts/audiofix.py analyze 演出录音.m4a --work out     # 判断 + 生成计划
 # 看 out/diagnosis.md，必要时改 out/plan.json
 python3 scripts/audiofix.py restore --work out                  # 修复 + 验证
-python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3   # 改一个参数重渲染
+python3 scripts/audiofix.py restore --work out --set music.match.hi_db=3 --why "低频太轰"   # 改参数重渲染，必须写理由
 ```
 
 **音色参考决定什么叫"好"。** 想要"像专辑"，最好的参考是这首歌自己的录音室版。修歌时 `auto` 会自己去找：
@@ -262,7 +266,21 @@ python3 scripts/audiofix.py investigate --work out --complaint "又出现了数�
 1. 把描述翻译成几个可能的原因（例如"数码感"可能是编码啸叫、补出来的高频太亮，或者 Apollo 的痕迹）；
 2. 在原版、修复后、成品之间逐个测量，按证据强弱排序；
 3. 每个可能的原因渲染一个只改一处的对照版本，生成 `investigate/ABC.wav`（每段依次是：当前版本、对照 1、对照 2……）；
-4. `investigate/investigate.md` 写明证据、每个版本改了什么；听众选定后，用 `restore --set` 应用那个版本的设置。
+4. `investigate/investigate.md` 写明证据、每个版本改了什么；听众选定后，用 `restore --set ... --why "听众选了第 N 版"` 应用那个版本的设置。
+
+### 改参数必须写理由
+
+每一处和默认方案（`plan_default.json`）不同的设置，都要用 `--why` 写明理由：测到了什么、哪条警告、或者听众怎么说。没写理由，`restore` 会拒绝运行（退出码 2），直接改 `plan.json` 也一样。理由记在 `plan_used.json` 里，`review.md` 会逐条列出。
+
+### 运行记录：看清别的 AI 是怎么修的
+
+```bash
+python3 scripts/audiofix.py bundle --work out                         # 打包 out/run_record.zip（不含音频）
+python3 scripts/audiofix.py compare GPT的.zip 我的.zip --names GPT,Claude   # 两次运行逐步对比
+```
+
+- **运行记录**：包含跑过的每条命令（被中断的也看得出来）、诊断、方案、每处改动和理由、每一步的测量账本、检查结果、复查清单、skill 版本和机器上装了哪些组件。
+- **对比结果**：第一行就写出两次运行从哪里开始分岔，可能是 skill 版本、输入文件、机器、参考、规则判断、手动改动，或者账本里数字开始分开的那一步。
 
 各个参数的含义见 [`references/tuning.md`](skills/live-audio-restore/references/tuning.md)。
 
@@ -275,7 +293,7 @@ python3 scripts/audiofix.py investigate --work out --complaint "又出现了数�
 | **Claude Code** | 把 `skills/live-audio-restore` 复制到 `~/.claude/skills/`（个人）或项目的 `.claude/skills/`。直接说"帮我修一下这段 live 录音"就会触发。在本仓库里打开时，`CLAUDE.md` 也会把它指过去 |
 | **Claude.ai / Claude 桌面版** | 把 `live-audio-restore` 文件夹打成 zip，在设置里作为 skill 上传 |
 | **Codex CLI、Cursor、Gemini CLI、GitHub Copilot、Aider 等编程代理** | 在本仓库里打开即可，[`AGENTS.md`](AGENTS.md) 会指引它们读取 `SKILL.md` 并按流程执行。支持 Agent Skills 开放格式的工具，也可以直接加载 `skills/live-audio-restore` 文件夹 |
-| **ChatGPT（代码解释器/数据分析）** | 沙箱通常不能联网、没有 PyTorch 和 ffmpeg。上传仓库 zip 和 **WAV** 格式音频，让它运行 `auto my.wav --work out --no-stems`。效果会比完整版弱，见 [`references/other-ai.md`](skills/live-audio-restore/references/other-ai.md) |
+| **ChatGPT（代码解释器/数据分析）** | 先让它把组件全部装好（`setup.sh`，或者照里面的 pip 命令逐条装），`check` 显示全部 READY 才能开始。装不上时它必须先告诉你缺什么，你同意了才能跑缩水版。见 [`references/other-ai.md`](skills/live-audio-restore/references/other-ai.md) |
 | **只能聊天的 AI** | 你在本地跑命令，把 `diagnosis.md` / `plan.json` / `verification.md` 贴给它看，它帮你判断和调参 |
 | **自定义 GPT / Gem / 项目** | [`references/other-ai.md`](skills/live-audio-restore/references/other-ai.md) 里有一段可直接粘贴的系统提示词 |
 
@@ -287,9 +305,9 @@ CLAUDE.md                            Claude Code 在本仓库中的入口（引�
 skills/live-audio-restore/
 ├── SKILL.md                         工作流（AI 读这个）
 ├── scripts/
-│   ├── audiofix.py                  命令行：check | profile | analyze | restore | verify | auto
+│   ├── audiofix.py                  命令行：check | profile | analyze | restore | verify | auto | investigate | bundle | compare
 │   ├── audiofix/                    实现：测量、分段、计划规则、音乐路径、讲话路径、母带、验证、DSP、响度
-│   ├── setup.sh                     安装依赖和 De-limiter 模型
+│   ├── setup.sh                     安装全部组件并下载模型（必需）
 │   └── make_test_clip.py            生成带已知问题的合成测试片段
 ├── assets/profiles/                 内置参考：jrock_band.json、speech_ltass.json（只含统计数据）
 ├── references/

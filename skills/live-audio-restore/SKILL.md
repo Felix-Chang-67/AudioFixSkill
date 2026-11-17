@@ -12,9 +12,10 @@ description: >-
   phasey, too quiet or drowned by the crowd.
 license: MIT (see LICENSE.txt)
 compatibility: >-
-  Any agent that can run shell commands with Python 3.9+, numpy and scipy. ffmpeg is recommended; the full
-  treatment adds demucs+torch, the De-limiter model and faster-whisper (all CPU-friendly). Missing pieces
-  degrade gracefully and are reported.
+  Any agent that can run shell commands with Python 3.9+ and install packages. The full install is required:
+  scripts/setup.sh installs ffmpeg's companions, demucs+torch, the De-limiter, Apollo and faster-whisper (all
+  CPU-friendly) and downloads their models. analyze and auto stop when a part is missing, and run a reduced
+  pipeline only with --degraded, after the user agreed.
 metadata:
   version: "1.0.0"
 ---
@@ -54,6 +55,8 @@ verify**. The plan is plain JSON, so you or the user can read and change it befo
      or anti-phase in a few bands, a mixed or a room-miked stereo image.
    - Two assistants hand-tuning the same song with this skill delivered results 3 dB apart in loudness and 3 LU apart
      in dynamics. Write every edit and its reason into the delivery message.
+   - `restore` refuses an edit without its reason: `--set key=value --why "<reason>"`. A hand edit of `plan.json`
+     is compared with `plan_default.json` (what the rules decided) and needs `--why` too.
 4. **Never overwrite the source.** Work in a work folder. Deliver a lossless WAV, an AAC copy and the A/B file.
 5. **Some things look helpful and are harmful:**
    - Neural denoisers on live speech: through a PA in a reverberant hall they remove the speech along with the
@@ -80,11 +83,20 @@ verify**. The plan is plain JSON, so you or the user can read and change it befo
 
    Answer every one in the delivery. Assistants that stopped at PASS shipped applause raised by 6 dB and a vocal
    lowered by 4.4 dB.
+8. **Install everything first; never run a reduced pipeline on your own.** Run `bash scripts/setup.sh`, then
+   `check`, which must end with `[ok] every part of the full pipeline is installed and its model is on disk`.
+   - An assistant that ran without PyTorch delivered a song with no stem separation and no codec repair (the vocal as
+     wide as in the original, the codec's holes kept) and never said so.
+   - `analyze` and `auto` stop with exit code 3 when a part is missing, and print how to install it. Install it.
+   - Do not work around it: no `--no-stems`, no `--codec-repair off` to save time, no skipped steps.
+   - Only if the install fails and you cannot fix it: tell the user what failed and what the result will lack, and
+     with their agreement run with `--degraded "<what failed; the user agreed>"`. `review.md` then lists what is
+     missing, and you say it again in the delivery.
 
 ## Quick start
 
 ```bash
-bash scripts/setup.sh                       # once: installs/clones what is missing, then runs `check`
+bash scripts/setup.sh                       # once, required: installs every part, downloads the models, runs `check`
 python3 scripts/audiofix.py auto INPUT --work WORK --content music    # a song: analyze + restore + verify
 python3 scripts/audiofix.py auto INPUT --work WORK --content speech   # an MC / talk
 python3 scripts/audiofix.py auto INPUT --work WORK                    # songs and MCs in one file: split automatically
@@ -92,6 +104,10 @@ python3 scripts/audiofix.py auto INPUT --work WORK                    # songs an
 
 For a song, `auto` also looks up the studio version of that very song online, the best tone target (step 1). It
 takes the artist and title from the file's tags, or from `--artist` / `--title`.
+
+**Long jobs.** On the CPU, codec repair (Apollo) takes about 6x the song's length. If your tool stops commands after
+a few minutes, start the command in the background (`nohup ... > run.out 2>&1 &`) and follow `WORK/log.txt`. If it
+is cut off anyway, run the same command again: Apollo resumes from the last saved 10 s chunk.
 
 `INPUT` can be any audio or video file ffmpeg reads. `WORK` collects everything:
 
@@ -111,6 +127,9 @@ takes the artist and title from the file's tags, or from `--artist` / `--title`.
 | `previous/` | The render before the last one, with its plan and checks, for comparison |
 | `investigate/` | After `investigate`: `ABC.wav` (current render and variants), `investigate.md` (evidence, versions, settings) |
 | `log.txt` | Everything the run printed |
+| `commands.jsonl` | Every command run on this folder, with the skill version and its exit code (a start with no end was cut off) |
+| `plan_default.json` | What the rules decided; every difference in `plan_used.json` carries its reason in `edit_reasons` |
+| `run_record.zip` | After `bundle`: the run's record (all of the text above, the skill version, the machine), no audio |
 
 ## Workflow
 
@@ -144,16 +163,21 @@ generic profile, a `[next]` line says so. Ask the user for the studio version ra
 python3 scripts/audiofix.py check
 ```
 
-| Missing | What degrades |
+Every part must show `READY`; `check` exits with code 3 otherwise, and `analyze` / `auto` refuse to run. Install
+what is missing (`bash scripts/setup.sh`). This is what a result loses without each part, which is why none is
+optional:
+
+| Part | What the result loses without it |
 |---|---|
 | ffmpeg | Only WAV in; no AAC copy, no stationary denoise, no declip |
 | demucs / torch | No stems: polarity repair, tone match and loudness run on the whole mix; no per-instrument steps; speech uses the mix. **Songs and talk can no longer be told apart**: the file is treated as music unless you pass `--content speech` (an MC) |
 | De-limiter | Over-limited music gets stronger drum-transient shaping instead of neural de-limiting |
 | faster-whisper | The MC talker is located by voicing instead of word timings (about 80 % accurate against word timings); `verify` loses the intelligibility check |
 | numba | Slower, vectorised approximations |
-| Apollo (codec repair) | On low-bitrate rips (cut-off below 16 kHz and a sparse band under it), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It runs on an NVIDIA (CUDA) or Apple silicon (MPS) GPU when one is found, and falls back to the CPU otherwise or if the GPU run fails. On the CPU it is slow, about 6x real time, so for long concerts you may choose `--codec-repair off` on purpose. `check` shows the device; `AUDIOFIX_DEVICE=cpu|cuda|mps` forces one |
+| Apollo (codec repair) | On low-bitrate rips (cut-off below 16 kHz and a sparse band under it), the highs keep the codec's sparse, metallic texture: "fake", harsh air. It runs on an NVIDIA (CUDA) or Apple silicon (MPS) GPU when one is found, and falls back to the CPU otherwise or if the GPU run fails. On the CPU it is slow, about 6x real time: run it in the background, and rerun to resume (Quick start, Long jobs). Turn it off (`--codec-repair off`) only when the user asks. `check` shows the device; `AUDIOFIX_DEVICE=cpu|cuda|mps` forces one |
 
-`setup.sh` installs all of them. On a machine without internet, see `references/other-ai.md`.
+`setup.sh` installs all of them and downloads every model, so later runs work offline. If it fails, read
+`references/other-ai.md`, fix what failed, and run it again; `--degraded` is the last resort (ground rule 8).
 
 ### 3. Analyze
 
@@ -200,11 +224,16 @@ they matter most:
 4. **Codec wall** (`music.band_ext`): the top above the cut-off is rebuilt.
 5. **Reference** (`profiles.music`): the target for every tone decision.
 
-Edit the plan directly, or override at render time:
+Override at render time, with the reason (required):
 
 ```bash
-python3 scripts/audiofix.py restore --work WORK --set music.delimit.depth=1.5 music.widen.enabled=false
+python3 scripts/audiofix.py restore --work WORK --set music.delimit.depth=1.5 music.widen.enabled=false \
+  --why "the listener: pumping on the drums; the ledger shows de-limit raised the crest by 3.5 dB"
 ```
+
+`restore` stops (exit code 2) on `--set` without `--why`, and on any setting that differs from `plan_default.json`
+without a reason, hand edits of `plan.json` included. The reasons go into `plan_used.json` (`edit_reasons`) and
+into `review.md`, and you repeat them in the delivery.
 
 Common edits:
 
@@ -280,6 +309,16 @@ first. The last `[next]` lines of `restore` repeat this. In the message:
 
 Do not describe a change you did not measure.
 
+Then pack the run's record and keep it with the delivery:
+
+```bash
+python3 scripts/audiofix.py bundle --work WORK      # WORK/run_record.zip: commands, plans, reasons, ledger, checks
+```
+
+When the user wants to know how the result was made, or to compare it with another assistant's, send that file.
+`compare THEIRS.zip MINE.zip --names X,Y` lines two runs up and names where they first part: the skill version, the
+input, the machine, the reference, a rule, an edit, or the step where the numbers split.
+
 ### 8. When the listener says something is wrong: investigate, do not guess
 
 Do not map their words straight to a knob. Run the investigation with their exact words:
@@ -302,7 +341,7 @@ Then:
 
 - Send ABC.wav.
 - Tell the listener in plain words what the measurements point to.
-- Ask which version is best, and apply its settings with `restore --set`.
+- Ask which version is best, and apply its settings with `restore --set ... --why "the listener chose version N"`.
 - If none helps, ask what exactly they hear (where, which instrument), then run it again with their new words.
 
 Why: an assistant that only mapped words to knobs changed nothing useful until it was told the cause. Asked the same
@@ -364,9 +403,9 @@ internet, and a prompt to paste into a custom GPT or project.
 
 ```
 SKILL.md                     this workflow
-scripts/audiofix.py          CLI: check | profile | analyze | restore | verify | auto
+scripts/audiofix.py          CLI: check | profile | analyze | restore | verify | auto | investigate | bundle | compare
 scripts/audiofix/            the library (analysis, plan rules, music, speech, master, verify, DSP, loudness)
-scripts/setup.sh             installs dependencies and the De-limiter model
+scripts/setup.sh             installs every part and downloads the models (required)
 scripts/make_test_clip.py    synthetic degraded song / MC clips with known problems (tests, demos)
 assets/profiles/             bundled references: jrock_band.json, speech_ltass.json
 references/diagnosis.md      how to judge: every measurement, threshold, symptom and decision, both paths
