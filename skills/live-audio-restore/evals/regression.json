@@ -30,6 +30,11 @@
      "path": "steps.band_ext.result_minus_target_db.*",
      "abs_max": 1.5,
      "why": "rebuilt top within 1.5 dB of the reference (pitfall 43)"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -52,6 +57,11 @@
      "path": "verify.warns",
      "max": 0,
      "why": "all checks PASS, words kept"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -82,6 +92,11 @@
      "path": "verify.warns",
      "max": 0,
      "why": "all checks PASS"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": true,
+     "why": "a 48 kHz HE-AAC broadcast: 7.5-14 kHz is the low band shifted up 6750 Hz (pitfall 47)"
     }
    ]
   },
@@ -134,6 +149,11 @@
      "path": "plan.repair.birdies.enabled",
      "info": true,
      "why": "the codec repair's own steady lines (17-20 kHz)"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -157,6 +177,11 @@
      "path": "verify.warns",
      "max": 0,
      "why": "crowd under the talk, words kept"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -200,6 +225,11 @@
      "path": "plan.repair.birdies.enabled",
      "info": true,
      "why": "the codec repair's own steady lines (17-20 kHz)"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -248,6 +278,11 @@
      "path": "plan.repair.birdies.enabled",
      "info": true,
      "why": "the codec repair's own steady lines (17-20 kHz)"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -286,6 +321,11 @@
      "path": "plan.repair.birdies.enabled",
      "info": true,
      "why": "the codec repair's own steady lines (17-20 kHz)"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": false,
+     "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
     }
    ]
   },
@@ -303,7 +343,29 @@
     {
      "path": "plan.repair.birdies.enabled",
      "eq": true,
-     "why": "four steady codec whistles at 8.44-10.51 kHz (pitfall 45)"
+     "why": "steady codec whistles at 8.44-10.51 kHz (pitfall 45), and on-and-off ones (pitfall 46)"
+    },
+    {
+     "path": "plan.repair.birdies.hz",
+     "near": [
+      6274.2,
+      6718.4,
+      7062.9,
+      7752.0
+     ],
+     "tol": 3,
+     "why": "a steady line at 6.27 kHz in 53 % of the frames, and the whistles that come and go at 6.72, 7.06 and 7.75 kHz (pitfall 46)"
+    },
+    {
+     "path": "diagnosis.sbr_copies.0.shift_hz",
+     "approx": 5512.5,
+     "tol": 11,
+     "why": "band replication: 1-5.9 kHz copied up 16 bands of 344.5 Hz (pitfall 47)"
+    },
+    {
+     "path": "plan.repair.sbr_copies.enabled",
+     "eq": true,
+     "why": "the copied notes are cut"
     },
     {
      "path": "plan.music.delimit.enabled",

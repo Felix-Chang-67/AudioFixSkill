@@ -76,22 +76,66 @@ The measure takes the peak at 50 or 60 Hz and its first six harmonics, minus the
 - The fix is notch filters (Q 35) on every harmonic at 6 dB or more.
 - Small excesses (2-6 dB) are normal. Bass notes land on those frequencies too.
 
-### Steady tones in the highs (codec whistles)
+### Whistles in the highs (codec tones, steady or on and off)
 
-The measure looks at the highs, 4-20.8 kHz, on the signal the render uses (after codec repair). It finds narrow
-lines that stand 8 dB or more over their +-160 Hz neighbourhood in the long-term spectrum. A line counts if it also
-stands 6 dB over its neighbours in at least 60 % of the frames, or 45 % above 12 kHz.
+Two measures look at the highs, 4-20.8 kHz, on the signal the render uses (after codec repair).
 
-- **Why it matters.** Music holds no tone at a fixed frequency in the top octaves for most of a song; a low-bitrate
-  encoder does.
+- **Steady lines.** A narrow line stands 8 dB or more over its +-160 Hz neighbourhood in the long-term spectrum. It
+  counts if it also stands 6 dB over its neighbours in at least 45 % of the frames.
+  - The floor was 60 % below 12 kHz until a 6.27 kHz line, 8 dB over its neighbours in 53 % of a song's frames, was
+    left in. At 45 %, the other eight recordings the skill was tuned on showed nothing below 12 kHz.
+- **On-and-off lines.** In 93 ms frames, a narrow peak 12 dB or more over its +-150 Hz neighbourhood is one whistle
+  if it holds its frequency (within 11 Hz) for 0.5 s or longer.
+  - Whistles within 12 Hz of each other make one line. A line counts when its whistles add up to 2 s or more, with
+    a median excess of 18 dB or more.
+  - At most 48 lines, the longest and strongest first. The frequency is read to a fraction of a bin: a 15 Hz notch
+    5 Hz off a line cuts it by only 5 dB.
+- **Why it matters.** Music holds no tone at a fixed frequency in the top octaves for most of a song, and it does
+  not come back to one exact frequency, 18 dB over its neighbours, for seconds in total. A low-bitrate encoder does
+  both.
+  - HE-AAC's band replication switches sinusoids on and off at the centres of its 344.5 Hz bands (at 44.1 kHz:
+    6.72, 7.06, 7.75, 8.44 ... kHz).
 - **Example.** A 50 kb/s HE-AAC rip carried four lines at 8.44, 9.13, 9.82 and 10.51 kHz, 689 Hz apart and 14-19 dB
   over their neighbours, through the whole song.
   - The restoration's lift of the highs raised them by about 10 dB.
   - The band extension copied the 10.51 kHz one up to 13.2, 16.6 and 19.1 kHz.
   - The listener heard a "digital feel".
-- **Codec repair adds its own.** Apollo's output carried 3-5 lines at 17-20.1 kHz on every song it processed.
+  - With those four notched, the listener still heard whistles in every version. 7.75 kHz whistled for 20 s in
+    total, 6.72 kHz for 6 s and 7.06 kHz for 3 s, 23-32 dB over their neighbours while on. They were in under 60 %
+    of the frames, the steady measure's floor then, so it missed them.
+- **Codec repair adds its own.** Apollo's output carried 3-5 steady lines at 17-20.1 kHz on every song it processed.
+  It also carried 8-40 on-and-off lines at multiples of 100 Hz, from 12.7 kHz up.
+- **No false alarms found.** On the seven other recordings the skill was tuned on, the on-and-off measure found
+  nothing below 12.7 kHz. Above that, it found only the codec repair's lines.
 - **The fix.** A 15 Hz-wide notch on each line (`repair.birdies`), on the mix and on every stem, before anything is
-  boosted or copied up. The four lines took 1.3 dB of the 8-11 kHz band with them.
+  boosted or copied up. The four steady lines took 1.3 dB of the 8-11 kHz band with them.
+- **Still heard?** `investigate` measures both kinds in the render, and its variant notches whatever is left.
+
+### Notes copied up into the highs (band replication)
+
+A low-bitrate HE-AAC encoder keeps only the low band and rebuilds the top from a copy of it, shifted up by a whole
+number of its bands (344.5 Hz at 44.1 kHz, 375 Hz at 48 kHz). Every held note below reappears up there that many Hz
+higher, out of tune with its own harmonics: a short whistle or a metallic ring on each note.
+
+- **The measure.** The tonal fine structure (dB over the +-150 Hz median) at f is correlated with that at f - D, for
+  every shift D from 2 to 9 kHz, with f from 4 kHz up to the codec's cut-off (the replication stops there).
+  - A shift counts at a correlation of 0.2 or more. Its band is the run of 500 Hz bands around the best one that
+    correlate 0.15 or more.
+- **Calibration.**
+  - A 50 kb/s rip scored 0.43 at 5512.5 Hz (16 bands): 1-5.9 kHz was copied into 6.5-11.4 kHz. Codec repair left
+    the copies in (0.36 after it).
+  - A broadcast scored 0.27 at 6750 Hz (18 bands of 375 Hz, a 48 kHz source), in 7.5-14 kHz.
+  - Six recordings without band replication found nothing over 0.1 below their cut-off.
+  - The codec repair's own 100 Hz comb, above the cut-off, scored 0.10-0.14 at multiples of 100 Hz. The cut-off bound
+    and the 0.2 floor keep it out.
+- **Example.** Once the steady and on-and-off whistles of that rip were notched, 21 short whistles were left. Three
+  of the strongest were notes from the low band, 5512.5 Hz higher: 1174 Hz at 6686 Hz, 1658 Hz at 7171 Hz, 1324 Hz at
+  6837 Hz. The restoration had made the one at 6686 Hz 13 dB more prominent.
+- **The fix** (`repair.sbr_copies`). In each 93 ms frame, a peak in the band that stands 6 dB or more over its
+  +-150 Hz median is cut to that median (at most 30 dB), when its source, the shift below, peaks there too.
+  - The cut is measured on the mix and applied alike to the mix and every stem.
+  - On that rip, 21 % of the band's bins were cut by 8 dB on average. The band lost about 3 dB, and the shift's
+    correlation fell to nothing. The tone match puts the band back toward the reference.
 
 ### Bandwidth and codec notches
 

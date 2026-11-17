@@ -227,3 +227,21 @@ The same audience recording was restored twice with this skill: once by Claude, 
     - Apollo's output carried 3-5 steady lines of its own at 17-20.1 kHz on every song.
     - Now: steady tones in the highs are found during analysis and notched out (15 Hz wide) on the mix and the stems,
       before anything is boosted or copied. Fill gains are capped at 12 dB, and weak bands are not singled out.
+46. **A whistle that comes and goes was not counted as one.**
+    - What happened: with the four steady whistles of pitfall 45 notched, the listener still heard whistles in every
+      version the investigation rendered.
+      - The same encoder switched sinusoids on and off at 6.72, 7.06 and 7.75 kHz: 20 s in total at 7.75 kHz,
+        23-32 dB over their neighbours while on.
+      - The steady measure then needed a line in 60 % of the frames; these were in fewer. So was a 6.27 kHz line, in
+        53 %.
+    - Now: short whistles are tracked in 93 ms frames. A frequency where they add up to 2 s or more is notched like a
+      steady line, and `investigate` measures both kinds in the render. A steady line counts from 45 % of the frames
+      at every frequency.
+47. **The codec copied every note into the highs, out of tune.**
+    - What happened: once all its whistles at fixed frequencies were notched, the same rip still had short whistles at
+      random frequencies. Each was a note from the low band, moved up 5512.5 Hz by the encoder's band replication:
+      1174 Hz at 6686 Hz, 1658 Hz at 7171 Hz.
+      - No fixed frequency catches them, since they follow the melody.
+      - The codec repair leaves them in, and the restoration made one 13 dB more prominent.
+    - Now: the shift is found by correlating the highs with the low band. In each frame, a peak in the copied band
+      whose source peaks too is cut to its surroundings, on the mix and every stem.

@@ -110,8 +110,20 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
     # steady narrow tones in the highs (codec artefacts, and the codec repair's own): notched out before anything is
     # boosted or copied up, or the band extension multiplies them
     D["tonal_lines"] = measure.tonal_lines(x)
+    for w in measure.whistle_lines(x):                     # on-and-off codec sinusoids, by accumulated time
+        if all(abs(w["hz"] - l["hz"]) > 12 for l in D["tonal_lines"]):
+            D["tonal_lines"].append({"hz": w["hz"], "excess_db": w["excess_db"], "presence": None,
+                                     "total_s": w["total_s"]})
+    D["tonal_lines"].sort(key=lambda l: l["hz"])
     if D["tonal_lines"]:
-        log(f"[analyze] steady narrow tones (codec artefacts): {[(l['hz'], l['excess_db']) for l in D['tonal_lines']]}")
+        log(f"[analyze] narrow tones (codec artefacts, steady or on and off): "
+            f"{[(l['hz'], l['excess_db']) for l in D['tonal_lines']]}")
+    # the top band rebuilt from a shifted copy of the low band (HE-AAC band replication): every held note leaves an
+    # out-of-tune copy up there
+    D["sbr_copies"] = measure.sbr_copies(x, D["bandwidth"]["cutoff_hz"])
+    for s in D["sbr_copies"]:
+        log(f"[analyze] the top band {s['band_hz'][0]}-{s['band_hz'][1]} Hz is the low band shifted up {s['shift_hz']} Hz "
+            f"(correlation {s['corr']}): copied tones (band replication)")
 
     st = None
     if use_stems and cap["stems"]:

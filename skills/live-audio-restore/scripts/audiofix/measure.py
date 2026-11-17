@@ -59,14 +59,15 @@ def hum(y):
     return {"mains_hz": best, "excess_db": [round(e, 1) for e in ex], "present": bool(present)}
 
 
-def tonal_lines(y, lo=4000.0, hi=20800.0, min_excess_db=8.0, min_presence=0.6, top_presence=0.45, max_lines=24):
+def tonal_lines(y, lo=4000.0, hi=20800.0, min_excess_db=8.0, min_presence=0.45, max_lines=24):
     """Steady narrow tones in the highs: codec artefacts ("birdies"), heard as a whistle or a digital edge.
 
     A low-bitrate HE-AAC rip carried a comb of lines at 8.44, 9.13, 9.82 and 10.51 kHz (689 Hz apart, 11-18 dB over
     their neighbours) through the whole song; the codec repair added more at 16.6-20.1 kHz. Music has no tone that
-    stays put in the top octave for most of a song, so a line counts when it stands min_excess_db over its +-160 Hz
-    neighbourhood in the long-term spectrum and at least 6 dB over its neighbours in min_presence of the frames
-    (top_presence above 12 kHz, where the codec repair's weaker lines sit and music has no steady tone at all)."""
+    stays put in the top octaves for half a song, so a line counts when it stands min_excess_db over its +-160 Hz
+    neighbourhood in the long-term spectrum and at least 6 dB over its neighbours in min_presence of the frames. The
+    floor was 60 % below 12 kHz until a 6.27 kHz whine, in 53 % of a song's frames, was left in; the eight other
+    recordings the skill was tuned on showed nothing below 12 kHz at 45 %."""
     from scipy.signal import find_peaks, stft
     m = y.mean(axis=1) if y.ndim == 2 else y
     f, P = welch(m, SR, nperseg=16384)
@@ -95,9 +96,134 @@ def tonal_lines(y, lo=4000.0, hi=20800.0, min_excess_db=8.0, min_presence=0.6, t
         nb = np.median(np.concatenate([A[k - 20:k - 5], A[k + 6:k + 21]]), axis=0)
         loud = A[k - 20:k + 21].max(axis=0) > A.max() - 80
         pres = float(np.mean((line - nb > 6)[loud])) if loud.any() else 0.0
-        if pres >= (top_presence if f[i] >= 12000 else min_presence):
+        if pres >= min_presence:
             out.append({"hz": round(float(f[i]), 1), "excess_db": round(float(ex[i]), 1), "presence": round(pres, 2)})
     return sorted(out, key=lambda r: r["hz"])
+
+
+def whistle_tracks(y, lo=2000.0, hi=20000.0, ex_db=12.0, min_s=0.5):
+    """Short whistles: narrow peaks (>= ex_db over the +-150 Hz neighbourhood in a 93 ms frame) holding their frequency
+    (+-11 Hz) for >= min_s. Returns [(hz, start_s, dur_s, max_excess_db)]."""
+    from scipy.signal import stft
+    m = y.mean(axis=1) if y.ndim == 2 else y
+    f, t, Z = stft(m, SR, nperseg=4096, noverlap=3072)
+    A = 20 * np.log10(np.abs(Z) + 1e-9)
+    E = A - median_filter(A, size=(29, 1))
+    sel = (f >= lo) & (f <= hi)
+    loud = A.max(axis=0) > A.max() - 70
+    up = np.roll(E, 1, axis=0) <= E
+    dn = np.roll(E, -1, axis=0) <= E
+    peak = sel[:, None] & (E >= ex_db) & up & dn & loud[None, :]
+    active, done = {}, []
+    for j in range(A.shape[1]):
+        nxt = {}
+        for k in np.flatnonzero(peak[:, j]):
+            e = float(E[k, j])
+            a, b, c = A[k - 1, j], A[k, j], A[k + 1, j]
+            kk = k + float(np.clip(0.5 * (a - c) / (a - 2 * b + c - 1e-9), -0.5, 0.5))   # sub-bin peak
+            key = next((q for q in (k, k - 1, k + 1) if q in active), None)
+            if key is not None:
+                s0, n, emax, ks = active.pop(key)
+                nxt[int(k)] = (s0, n + 1, max(emax, e), ks + [kk])
+            else:
+                nxt[int(k)] = (j, 1, e, [kk])
+        done += list(active.values())
+        active = nxt
+    done += list(active.values())
+    hop, df = t[1] - t[0], f[1] - f[0]
+    return [(float(np.median(ks) * df), s0 * hop, n * hop, emax) for s0, n, emax, ks in done if n * hop >= min_s]
+
+
+def whistle_lines(y, lo=4000.0, min_total_s=2.0, min_excess_db=18.0, max_lines=48):
+    """Frequencies where short whistles pile up: a low-bitrate HE-AAC encoder inserts sinusoids at fixed frequencies
+    (QMF band centres) on and off through the song. On one rip, 7.75 kHz whistled 20 s in total and 6.72 kHz 6 s, each
+    time 23-32 dB over its neighbours, yet neither was steady enough for tonal_lines (present in under 60 % of the
+    frames, its floor then). A frequency counts with >= min_total_s of tracks and a median excess >= min_excess_db. The
+    codec repair leaves the same kind of on-and-off lines in the band it rebuilds (multiples of 100 Hz above 12 kHz).
+    Music holds no such tone at one frequency for seconds: on the seven other recordings the skill was tuned on,
+    nothing was found below 12.7 kHz, and above it only the codec repair's lines."""
+    tr = sorted(whistle_tracks(y, lo=lo), key=lambda x: x[0])
+    groups = []
+    for x in tr:
+        if groups and x[0] - groups[-1][-1][0] <= 12:
+            groups[-1].append(x)
+        else:
+            groups.append([x])
+    out = []
+    for g in groups:
+        tot = sum(x[2] for x in g)
+        exm = float(np.median([x[3] for x in g]))
+        if tot >= min_total_s and exm >= min_excess_db:
+            out.append({"hz": round(float(np.average([x[0] for x in g], weights=[x[2] for x in g])), 1),
+                        "total_s": round(float(tot), 1), "excess_db": round(exm, 1)})
+    out = sorted(out, key=lambda w: -w["total_s"] * w["excess_db"])[:max_lines]
+    return sorted(out, key=lambda w: w["hz"])
+
+
+def _peaks_db(m, nperseg=4096, hop=2048, starts=None, seg=None):
+    """dB over the +-150 Hz median, peaks only (>= 0), loud frames only; spread over the file."""
+    from scipy.signal import stft
+    E, f = [], None
+    for s in starts:
+        f, _, Z = stft(m[s:s + seg], SR, nperseg=nperseg, noverlap=nperseg - hop)
+        A = 20 * np.log10(np.abs(Z) + 1e-9)
+        loud = A.max(axis=0) > A.max() - 60
+        E.append(np.clip(A - median_filter(A, size=(29, 1)), 0, None)[:, loud])
+    return f, np.concatenate(E, axis=1)
+
+
+def sbr_copies(y, cutoff_hz=None, min_corr=0.2, band_corr=0.15):
+    """Is the top band a shifted copy of the low band? HE-AAC's spectral band replication rebuilds it from the low band
+    moved up by a whole number of its 344.5 Hz bands (at 44.1 kHz), so every tone below reappears up there D Hz
+    higher, out of tune with its own harmonics: a short whistle or a metallic ring on every held note. A 50 kb/s rip
+    moved 1-5.9 kHz up by 5512.5 Hz into 6.5-11.4 kHz.
+
+    The tonal fine structure (dB over the +-150 Hz median) at f is correlated with that at f - D over the song, for
+    D = 2-9 kHz, with f from 4 kHz up to the codec's cut-off (the band replication stops there). That rip scored 0.43
+    at 5512.5 Hz, and 0.36 after codec repair, which leaves the copies in. A 48 kHz broadcast scored 0.27 at 6750 Hz
+    (18 bands of 375 Hz). Six recordings without it found nothing over 0.1 below their cut-off; the codec repair's own
+    100 Hz comb, above the cut-off, scored 0.10-0.14 at multiples of 100 Hz. A shift counts from min_corr. Its band is the run of
+    500 Hz bands around the best one that correlate band_corr or more. Returns [{"shift_hz", "corr", "band_hz"}]."""
+    m = y.mean(axis=1) if y.ndim == 2 else y
+    n, seg = len(m), int(20 * SR)
+    starts = np.linspace(0, max(0, n - seg), min(6, max(1, n // seg))).astype(int)
+    f, E = _peaks_db(m, starts=starts, seg=seg)
+    df = f[1] - f[0]
+    top = int(min(cutoff_hz or 16000, 16000) / df)
+
+    def corr(D, ks):
+        ks = ks[(ks - D > int(150 / df)) & (ks < len(f))]
+        if len(ks) < 8:
+            return 0.0
+        a, b = E[ks].ravel(), E[ks - D].ravel()
+        a, b = a - a.mean(), b - b.mean()
+        return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
+
+    Ds = np.arange(int(2000 / df), int(9000 / df))
+    c = np.array([corr(D, np.arange(max(int(4000 / df), D + int(150 / df)), top)) for D in Ds])
+    out = []
+    for i in np.argsort(-c):
+        if c[i] < min_corr or len(out) >= 2:
+            break
+        if any(abs(Ds[i] - round(o["shift_hz"] / df)) <= 3 for o in out):
+            continue
+        D = int(Ds[i])
+        edges = np.arange(int(max(4000, D * df + 150) / 500) * 500, top * df, 500.0)
+        cb = [corr(D, np.arange(int(lo / df), int((lo + 500) / df))) for lo in edges]
+        if not cb:
+            continue
+        j = int(np.argmax(cb))
+        a = b = j
+        while a > 0 and cb[a - 1] >= band_corr:
+            a -= 1
+        while b < len(cb) - 1 and cb[b + 1] >= band_corr:
+            b += 1
+        if cb[j] < band_corr:
+            continue
+        out.append({"shift_hz": round(float(D * df), 1), "corr": round(float(c[i]), 3),
+                    "band_hz": [int(edges[a]), int(min(edges[b] + 500, top * df))],
+                    "band_corr": [round(v, 2) for v in cb[a:b + 1]]})
+    return out
 
 
 def bandwidth(y):

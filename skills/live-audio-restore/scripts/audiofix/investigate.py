@@ -79,22 +79,50 @@ class Context:
 
 
 # ------------------------------------------------------------------ probes: each returns a finding or None
+def _whistles(y):
+    """Steady lines (long-term spectrum) and on-and-off ones (short whistles piling up at one frequency)."""
+    steady = measure.tonal_lines(y)
+    onoff = [w for w in measure.whistle_lines(y) if all(abs(w["hz"] - s["hz"]) > 12 for s in steady)]
+    return steady, onoff
+
+
 def p_whistles(c):
-    lines = measure.tonal_lines(c.out, min_presence=0.45)
-    before = measure.tonal_lines(c.orig, min_presence=0.45)
-    if not lines:
-        return {"id": "whistles", "score": 0.0, "hypothesis": "steady whistles (narrow tones) in the highs",
-                "evidence": f"none in the render (the original had {len(before)})"}
-    worst = max(line["excess_db"] for line in lines)
+    steady, onoff = _whistles(c.out)
+    b_steady, b_onoff = _whistles(c.orig)
+    copies = measure.sbr_copies(c.out, c.cut)            # tones band replication copied up, still there
+    b_copies = measure.sbr_copies(c.orig, c.cut)
+    hyp = "whistles (narrow tones) in the highs: steady, on and off, or notes copied up by the codec"
+    before = (f"the original had {len(b_steady)} steady and {len(b_onoff)} on and off"
+              + (f", and its top band was the low band shifted up {b_copies[0]['shift_hz']} Hz (correlation "
+                 f"{b_copies[0]['corr']})" if b_copies else ""))
+    if not steady and not onoff and not copies:
+        return {"id": "whistles", "score": 0.0, "hypothesis": hyp, "evidence": f"none in the render ({before})"}
+    lines = steady + onoff
     known = set((c.P.get("repair") or {}).get("birdies", {}).get("hz") or [])
     hz = sorted(known | {line["hz"] for line in lines})
     where = ", ".join(f"{line['hz'] / 1000:.2f}" for line in lines)
-    return {"id": "whistles", "score": float(np.clip((worst - 6) / 10, 0.2, 1.0)),
-            "hypothesis": "steady whistles (narrow tones) in the highs",
-            "evidence": f"{len(lines)} in the render, up to {worst} dB over their neighbours, at {where} kHz "
-                        f"(the original had {len(before)})",
-            "variant": {"repair.birdies.enabled": True, "repair.birdies.hz": hz},
-            "label": "notch every steady tone left"}
+    secs = sum(w["total_s"] for w in onoff)
+    # a steady line counts from 6 dB over its neighbours in the long-term spectrum; an on-and-off one is measured
+    # in short frames, where 18 dB is the floor
+    score = max([np.clip((s["excess_db"] - 6) / 10, 0.2, 1.0) for s in steady]
+                + [np.clip(0.4 + w["total_s"] / 10, 0.4, 1.0) for w in onoff]
+                + [np.clip(0.4 + s["corr"], 0.4, 1.0) for s in copies])
+    ev = []
+    if lines:
+        ev.append(f"{len(steady)} steady and {len(onoff)} on and off in the render"
+                  + (f" (whistling {secs:.0f} s in total)" if onoff else "") + f", at {where} kHz")
+    for s in copies:
+        ev.append(f"its {s['band_hz'][0]}-{s['band_hz'][1]} Hz band is still the low band shifted up {s['shift_hz']} Hz "
+                  f"(correlation {s['corr']})")
+    var = {}
+    if lines:
+        var.update({"repair.birdies.enabled": True, "repair.birdies.hz": hz})
+    if copies:
+        var.update({"repair.sbr_copies.enabled": True,
+                    "repair.sbr_copies.shifts": [{"shift_hz": s["shift_hz"], "band_hz": s["band_hz"]} for s in copies]})
+    return {"id": "whistles", "score": float(score), "hypothesis": hyp,
+            "evidence": "; ".join(ev) + f" ({before})", "variant": var,
+            "label": "notch every whistle left" + (" and cut the copied tones" if copies else "")}
 
 
 def p_top(c):

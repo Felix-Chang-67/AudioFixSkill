@@ -48,11 +48,25 @@ def build(D):
     else:
         R["dehum"] = {"enabled": False, "why": f"no mains hum (largest excess {max(h['excess_db']):.0f} dB)"}
     tl = D.get("tonal_lines") or []
+    onoff = [l for l in tl if l.get("presence") is None]
     R["birdies"] = {"enabled": bool(tl), "hz": [l["hz"] for l in tl], "bw_hz": 15.0,
-                    "why": (f"{len(tl)} steady narrow tone(s) in the highs, {[(l['hz'], l['excess_db']) for l in tl]} "
-                            f"(Hz, dB over the neighbourhood), present in most of the song: codec artefacts or the codec "
-                            f"repair's, heard as a whistle or a digital edge. Each is notched out 15 Hz wide before "
-                            f"anything is boosted or copied up" if tl else "no steady narrow tones in the highs")}
+                    "why": (f"{len(tl)} narrow tone(s) in the highs, {[(l['hz'], l['excess_db']) for l in tl]} "
+                            f"(Hz, dB over the neighbourhood): {len(tl) - len(onoff)} steady (present in 45 % or more "
+                            f"of the frames) and {len(onoff)} on and off (short whistles piling up to >= 2 s at one frequency, "
+                            f"18 dB or more over their neighbours). Codec artefacts or the codec repair's, heard as a "
+                            f"whistle or a digital edge. Each is notched out 15 Hz wide before anything is boosted or "
+                            f"copied up" if tl else "no narrow tones in the highs, steady or on and off")}
+    sb = D.get("sbr_copies") or []
+    R["sbr_copies"] = {
+        "enabled": bool(sb), "shifts": [{"shift_hz": s["shift_hz"], "band_hz": s["band_hz"]} for s in sb],
+        "min_db": 6.0, "max_cut_db": 30.0,
+        "why": ("; ".join(f"{s['band_hz'][0]}-{s['band_hz'][1]} Hz is the low band shifted up {s['shift_hz']} Hz "
+                          f"(correlation {s['corr']}; rule >= 0.2, recordings without it 0.01-0.14)" for s in sb)
+                + ": a low-bitrate encoder's band replication, which copies every held note up there out of tune "
+                  "with itself (short whistles, a metallic ring). In each frame, a peak there whose source, the shift "
+                  "below, peaks too is cut to the level of its neighbourhood (at most 30 dB), on the mix and on every "
+                  "stem alike" if sb else
+                "the highs are not a shifted copy of the low band (no band replication)")}
     c = D["clipping"]
     clipped = c["flat_runs_per_min"] >= 20
     R["declip"] = {"enabled": bool(clipped and cap["ffmpeg"]),

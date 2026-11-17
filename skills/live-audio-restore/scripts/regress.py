@@ -71,6 +71,9 @@ def check(ctx, e):
         return v == e["eq"], f"{v}"
     if "contains" in e:
         return e["contains"] in v, f"{v}"
+    if "near" in e:                                   # a list holds a number within tol of each value
+        miss = [n for n in e["near"] if not any(abs(x - n) <= e.get("tol", 1.0) for x in v)]
+        return not miss, f"missing {miss}" if miss else f"{len(v)} values, all {len(e['near'])} found"
     if "endswith" in e:
         return str(v).endswith(e["endswith"]), f"{v}"
     if "approx" in e:

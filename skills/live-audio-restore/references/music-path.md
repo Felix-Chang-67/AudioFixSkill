@@ -363,10 +363,11 @@ others. The overall level is left to the master.
 |---|---|
 | 20 Hz high-pass (2nd order) | Always |
 | Mains notches (Q 35) at the flagged harmonics | Hum detected |
-| 15 Hz-wide notches on steady tones in the highs (`birdies`) | Codec whistles found (diagnosis.md, "Steady tones") |
+| 15 Hz-wide notches on narrow tones in the highs (`birdies`) | Codec whistles found, steady or on and off (diagnosis.md, "Whistles in the highs") |
+| Copied tones cut to their surroundings, frame by frame (`sbr_copies`) | The highs are a shifted copy of the low band (diagnosis.md, "Notes copied up") |
 | ffmpeg `adeclip` | Clipping detected |
 
-Stems receive the same high-pass and notches.
+Stems receive the same high-pass and notches, and the copied-tone cut measured on the mix.
 
 ## Loudness (`master`)
 

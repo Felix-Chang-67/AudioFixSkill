@@ -106,6 +106,64 @@ def notch(y, f0, q=30.0):
     return filtfilt(b, a, y, axis=0).astype(np.float32)
 
 
+def notches(y, freqs, bw_hz=15.0):
+    """Notch every frequency in freqs, bw_hz wide each, as one zero-phase cascade."""
+    from scipy.signal import iirnotch, sosfiltfilt, tf2sos
+    freqs = [f for f in freqs if 0 < f < SR / 2 - bw_hz]
+    if not freqs:
+        return y
+    sos = np.concatenate([tf2sos(*iirnotch(f, f / bw_hz, fs=SR)) for f in freqs])
+    return sosfiltfilt(sos, y, axis=0).astype(np.float32)
+
+
+def sbr_cut(m, shifts, nperseg=4096, hop=1024, min_db=6.0, max_cut_db=30.0):
+    """How many dB to take off each STFT bin of the top band so that the tones spectral band replication copied up
+    (measure.sbr_copies) sink to the level of their neighbourhood.
+
+    A bin is cut in a frame where it peaks min_db or more over its +-150 Hz median and the low band, shift_hz below,
+    peaks there too (the tone it was copied from). Every bin of the peak (+-2 bins, the window's main lobe) goes down
+    to the median, by at most max_cut_db, held one frame either side. Noise and envelope stay. Returns (k0, cut), cut
+    in dB with cut[k - k0, frame], computed on the mono mix and applied alike to the mix and every stem."""
+    f, _, Z = stft(m, SR, nperseg=nperseg, noverlap=nperseg - hop)
+    df = f[1] - f[0]
+    bands = [(int(round(s["shift_hz"] / df)), int(s["band_hz"][0] / df), int(s["band_hz"][1] / df) + 1)
+             for s in shifts]
+    k_lo, k_hi = min(b[1] for b in bands) - 2, max(b[2] for b in bands) + 2
+    r0 = max(0, min(b[1] - b[0] for b in bands) - 20)
+    r1 = min(len(f), k_hi + 20)
+    A = 20 * np.log10(np.abs(Z[r0:r1]) + 1e-9).astype(np.float32)
+    del Z
+    from scipy.ndimage import median_filter
+    E = A - median_filter(A, size=(29, 1))
+    cut = np.zeros((k_hi - k_lo, E.shape[1]), np.float32)
+    for D, a, b in bands:
+        for k in range(max(a, D + 2), min(b, r1 - 2)):
+            e = E[k - r0]
+            hit = (e >= min_db) & (e >= E[k - 1 - r0]) & (e >= E[k + 1 - r0])
+            if not hit.any():
+                continue
+            src = np.maximum(np.maximum(E[k - D - 1 - r0], E[k - D - r0]), E[k - D + 1 - r0])
+            hit &= src >= min_db
+            if not hit.any():
+                continue
+            for j in range(-2, 3):
+                c = np.where(hit, np.clip(E[k + j - r0], 0, max_cut_db), 0)
+                cut[k + j - k_lo] = np.maximum(cut[k + j - k_lo], c)
+    return k_lo, maximum_filter1d(cut, 3, axis=1)
+
+
+def apply_cut(y, k0, cut, nperseg=4096, hop=1024):
+    """Apply an STFT-domain cut (dB, rows from bin k0) to every channel; the rest of the spectrum passes untouched."""
+    g = (10 ** (-cut / 20)).astype(np.float32)
+    out = np.empty_like(y)
+    for c in range(y.shape[1]):
+        _, _, Z = stft(y[:, c], SR, nperseg=nperseg, noverlap=nperseg - hop)
+        Z[k0:k0 + len(g)] *= g[:, :Z.shape[1]]
+        _, x = istft(Z, SR, nperseg=nperseg, noverlap=nperseg - hop)
+        out[:, c] = x[:len(y)]
+    return out
+
+
 def ramp_weights(n, edges, fade=1.5):
     """Raised-cosine membership weights for consecutive sections [(a, b), ...] in seconds; they sum to 1."""
     t = np.arange(n) / SR

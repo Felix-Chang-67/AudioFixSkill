@@ -10,11 +10,27 @@ def _birdies(y, R, log=None):
     b = R.get("birdies") or {}
     if not b.get("enabled"):
         return y
-    for f0 in b["hz"]:
-        y = dsp.notch(y, f0, q=f0 / b.get("bw_hz", 15.0))
+    y = dsp.notches(y, b["hz"], b.get("bw_hz", 15.0))
     if log:
-        log(f"[repair] notched {len(b['hz'])} steady codec tone(s): {b['hz']} Hz")
+        log(f"[repair] notched {len(b['hz'])} codec tone(s), steady or on and off: {b['hz']} Hz")
     return y
+
+
+def _sbr(y, R, log=None, cut=None):
+    """Cut the tones band replication copied up; the cut is measured on the mix and applied alike to every stem."""
+    s = R.get("sbr_copies") or {}
+    if not s.get("enabled") or not s.get("shifts"):
+        return y, None
+    if cut is None:
+        cut = dsp.sbr_cut(y.mean(axis=1), s["shifts"], min_db=s.get("min_db", 6.0),
+                          max_cut_db=s.get("max_cut_db", 30.0))
+        if log:
+            c = cut[1]
+            on = c > 3
+            log(f"[repair] cut the tones band replication copied up ({', '.join(str(v['shift_hz']) for v in s['shifts'])}"
+                f" Hz shift): in {np.mean(on.any(axis=0)) * 100:.0f} % of the frames, {np.mean(on) * 100:.0f} % of the "
+                f"band's bins, by {c[on].mean() if on.any() else 0:.1f} dB on average")
+    return dsp.apply_cut(y, *cut), cut
 
 
 def _repairs(x, R, log):
@@ -24,6 +40,7 @@ def _repairs(x, R, log):
             y = dsp.notch(y, R["dehum"]["mains_hz"] * k, q=35.0)
         log(f"[repair] notched {R['dehum']['mains_hz']} Hz x{R['dehum']['harmonics']}")
     y = _birdies(y, R, log)
+    y, R_cut = _sbr(y, R, log)
     if R.get("declip", {}).get("enabled") and audio_io.have_ffmpeg():
         p = subprocess.run(["ffmpeg", "-v", "error", "-f", "f32le", "-ar", str(SR), "-ac", "2", "-i", "-",
                             "-af", "adeclip", "-f", "f32le", "-"], input=np.ascontiguousarray(y).tobytes(),
@@ -31,7 +48,7 @@ def _repairs(x, R, log):
         z = np.frombuffer(p.stdout, np.float32).reshape(-1, 2)[:len(y)]
         y = np.ascontiguousarray(z) if len(z) == len(y) else y
         log("[repair] declipped (ffmpeg adeclip)")
-    return y.astype(np.float32)
+    return y.astype(np.float32), R_cut
 
 
 def restore(work, plan, log=print):
@@ -44,7 +61,7 @@ def restore(work, plan, log=print):
     if use_rep:
         log("[repair] using the codec-repaired input (Apollo)")
     n = len(x)
-    x = _repairs(x, plan["repair"], log)
+    x, sbr_cut = _repairs(x, plan["repair"], log)
     st = None
     if D.get("stems_dir") and (plan.get("music") or (plan.get("speech") and plan["speech"]["source"]["value"] == "stems")):
         st = S.load(D["stems_dir"], n)
@@ -53,7 +70,7 @@ def restore(work, plan, log=print):
             for k in list(st):
                 for h in plan["repair"]["dehum"]["harmonics"]:
                     st[k] = dsp.notch(st[k], plan["repair"]["dehum"]["mains_hz"] * h, q=35.0)
-        st = {k: _birdies(v, plan["repair"]) for k, v in st.items()}
+        st = {k: _sbr(_birdies(v, plan["repair"]), plan["repair"], cut=sbr_cut)[0] for k, v in st.items()}
     segs = plan["segments"]
     mus, spc = regions(segs, "music"), regions(segs, "speech")
     y_m = y_s = None

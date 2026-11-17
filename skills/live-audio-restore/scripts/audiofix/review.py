@@ -103,14 +103,24 @@ def material(D):
             f"studio one. Its tone is still the target; check the low-end EQ and the balance against what is played")})
     if D.get("music") and ref.get("used") in ("jrock_band",) and ref.get("auto"):
         items.append({"kind": "reference", "text": f"Tone target: the generic profile. {ref.get('why', '')}"})
+    for s in D.get("sbr_copies") or []:
+        items.append({"kind": "whistles", "text": (
+            f"The top band {s['band_hz'][0] / 1000:.1f}-{s['band_hz'][1] / 1000:.1f} kHz was a copy of the low band "
+            f"shifted up {s['shift_hz']} Hz (a low-bitrate encoder's band replication, correlation {s['corr']}): every "
+            f"held note had an out-of-tune copy up there, heard as short whistles or a metallic ring. The copied tones "
+            f"were cut to the level of their surroundings (the [repair] line says how much). Tell the listener; the band "
+            f"keeps its level and noise, not its fake tones")})
     tl = D.get("tonal_lines") or []
     if tl:
-        where = ", ".join(f"{line['hz'] / 1000:.2f} kHz" for line in tl)
+        where = ", ".join(f"{line['hz'] / 1000:.2f}" for line in tl)
+        onoff = [line for line in tl if line.get("presence") is None]
         items.append({"kind": "whistles", "text": (
-            f"{len(tl)} steady narrow tone(s) in the highs were found and notched out (15 Hz wide each): "
-            f"{where}. Codec artefacts or the codec repair's; "
-            f"left in, the restoration's lift of the highs and the band extension multiply them into a whistle or a "
-            f"digital edge. Tell the listener they were there and are gone")})
+            f"{len(tl)} narrow tone(s) in the highs were found and notched out (15 Hz wide each) at {where} kHz: "
+            f"{len(tl) - len(onoff)} steady and {len(onoff)} on and off"
+            + (f" (whistling {sum(line['total_s'] for line in onoff):.0f} s in total)" if onoff else "")
+            + ". Codec artefacts or the codec repair's; left in, the restoration's lift of the highs and the band "
+              "extension multiply them into a whistle or a digital edge. Tell the listener they were there and are "
+              "gone; if a whistle is still heard, investigate measures what is left")})
     items += missing(D)
     cr = D.get("codec_repair") or {}
     if cr.get("applied"):
