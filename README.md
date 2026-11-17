@@ -249,7 +249,20 @@ python3 scripts/audiofix.py auto 演出录音.m4a --work out --music-profile mys
   - MC 欢呼已在讲话之下、Whisper 识别讲话不比原来差。
 - **人耳确认**：`AB.wav` 是响度对齐的原版/修复版对比，避免"更响 = 更好"的错觉。
 
-用户听完后的反馈怎么对应到参数（"太闷""太刺""低音太多""欢呼没了不像现场"……），见 [`references/tuning.md`](skills/live-audio-restore/references/tuning.md)。
+### 听完觉得哪里不对：排查，而不是猜
+
+把听众的原话交给 `investigate`，它会像工程师一样排查：
+
+```bash
+python3 scripts/audiofix.py investigate --work out --complaint "又出现了数码感，人声有点散"
+```
+
+1. 把描述翻译成几个可能的原因（例如"数码感"可能是编码啸叫、补出来的高频太亮，或者 Apollo 的痕迹）；
+2. 在原版、修复后、成品之间逐个测量，按证据强弱排序；
+3. 每个可能的原因渲染一个只改一处的对照版本，生成 `investigate/ABC.wav`（每段依次是：当前版本、对照 1、对照 2……）；
+4. `investigate/investigate.md` 写明证据、每个版本改了什么；听众选定后，用 `restore --set` 应用那个版本的设置。
+
+各个参数的含义见 [`references/tuning.md`](skills/live-audio-restore/references/tuning.md)。
 
 ---
 

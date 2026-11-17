@@ -194,6 +194,11 @@ def _autofix(a, V, P, log):
     return V2
 
 
+def cmd_investigate(a):
+    from . import investigate
+    investigate.run(a.work, a.complaint, render=not a.no_render, max_variants=a.max_variants, log=Log(a.work))
+
+
 def cmd_analyze(a):
     os.makedirs(a.work, exist_ok=True)
     _analyze(a, Log(a.work))
@@ -275,6 +280,12 @@ def main(argv=None):
     v = sub.add_parser("verify", help="metrics, checks, A/B file and plots for a rendered work folder")
     v.add_argument("--work", required=True)
     v.add_argument("--no-plots", action="store_true")
+    iv = sub.add_parser("investigate", help="a listener's complaint: hypotheses measured at every stage, one variant "
+                                            "rendered per likely cause, and a listening file to choose from")
+    iv.add_argument("--work", required=True)
+    iv.add_argument("--complaint", required=True, help="the listener's words, in any language")
+    iv.add_argument("--no-render", action="store_true", help="measure and rank only")
+    iv.add_argument("--max-variants", type=int, default=3)
     au = sub.add_parser("auto", help="analyze + restore + verify in one go")
     common(au)
     au.add_argument("--set", nargs="*")
@@ -282,7 +293,7 @@ def main(argv=None):
     au.add_argument("--no-plots", action="store_true")
     a = ap.parse_args(argv)
     {"check": cmd_check, "profile": cmd_profile, "analyze": cmd_analyze, "restore": cmd_restore,
-     "verify": cmd_verify, "auto": cmd_auto}[a.cmd](a)
+     "verify": cmd_verify, "auto": cmd_auto, "investigate": cmd_investigate}[a.cmd](a)
 
 
 if __name__ == "__main__":

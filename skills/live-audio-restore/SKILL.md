@@ -109,6 +109,7 @@ takes the artist and title from the file's tags, or from `--artist` / `--title`.
 | `review.md` | What to check and answer before delivering, with the cause and knob of every WARN |
 | `steps.json` | The step ledger: loudness, 3 s crest, loudness range, mono loss and tone after every music step |
 | `previous/` | The render before the last one, with its plan and checks, for comparison |
+| `investigate/` | After `investigate`: `ABC.wav` (current render and variants), `investigate.md` (evidence, versions, settings) |
 | `log.txt` | Everything the run printed |
 
 ## Workflow
@@ -279,18 +280,36 @@ first. The last `[next]` lines of `restore` repeat this. In the message:
 
 Do not describe a change you did not measure.
 
-### 8. Iterate with the listener
+### 8. When the listener says something is wrong: investigate, do not guess
 
-Map what the user says to a knob, change one thing at a time, re-render and send a new `AB.wav`. For example:
+Do not map their words straight to a knob. Run the investigation with their exact words:
 
-- "Muddy" → less 200-400 Hz.
-- "Harsh" → stronger de-ess, or less 3-8 kHz.
-- "Thin" → more 60-120 Hz.
-- "Squashed" → a lower loudness target.
-- "Phasey" → check the anti-phase stems.
-- "Too much effect" → toward natural.
+```bash
+python3 scripts/audiofix.py investigate --work WORK --complaint "又出现了数码感，人声有点散"
+```
 
-`references/tuning.md` has the full table for both paths.
+It does what an engineer does:
+
+1. **Reads the words as hypotheses.** For example, "digital" may be whistles, a rebuilt top that is too present, or
+   the codec's texture. "Scattered" may be separation artefacts or the stereo image.
+2. **Measures each hypothesis** on the original, the codec-repaired input, the render and the step ledger, and ranks
+   them by evidence.
+3. **Renders one variant per likely cause,** each changing one setting.
+4. **Writes `investigate/ABC.wav`:** per passage, the current render and then each variant.
+5. **Writes `investigate/investigate.md`:** the evidence, the order of the versions and their settings.
+
+Then:
+
+- Send ABC.wav.
+- Tell the listener in plain words what the measurements point to.
+- Ask which version is best, and apply its settings with `restore --set`.
+- If none helps, ask what exactly they hear (where, which instrument), then run it again with their new words.
+
+Why: an assistant that only mapped words to knobs changed nothing useful until it was told the cause. Asked the same
+way, the investigation found 15 steady whistles where the original had 4: a codec's whistles, lifted and copied up
+by the restoration.
+
+`references/tuning.md` explains every knob, for both paths.
 
 ## The two paths in brief
 

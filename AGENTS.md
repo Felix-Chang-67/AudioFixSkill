@@ -43,8 +43,13 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
    - Change one knob at a time and re-render. The last render stays in `previous/` for comparison.
    - `missing` items say what this machine could not do (no PyTorch, no internet, no ffmpeg). Tell the user what the
      result lacks because of it.
-7. Never overwrite the user's source file; everything goes into the work folder.
-8. Explain the result in the user's language, in plain words.
+7. When the listener says something sounds wrong, investigate before changing anything:
+   - Run `python3 scripts/audiofix.py investigate --work WORK --complaint "<their exact words>"`.
+   - It measures every likely cause, ranks them, renders one variant per cause and writes `investigate/ABC.wav`.
+   - Send that file, explain the evidence, ask which version is best, then apply that version's settings
+     (`investigate/investigate.md`). Do not pick a knob from the words alone.
+8. Never overwrite the user's source file; everything goes into the work folder.
+9. Explain the result in the user's language, in plain words.
 
 ## Working on the code
 

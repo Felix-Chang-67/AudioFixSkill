@@ -1,5 +1,9 @@
 # Tuning from listener feedback
 
+First run `audiofix.py investigate --work WORK --complaint "<the listener's words>"` (SKILL.md step 8). It measures
+the likely causes and renders a variant for each. This table explains the knobs it uses, and the ones to try when the
+listener asks for something specific.
+
 Change one thing at a time, re-render, and send a new `AB.wav`. Overrides go on the command line (they are saved in
 `plan_used.json`) or into `plan.json`:
 
