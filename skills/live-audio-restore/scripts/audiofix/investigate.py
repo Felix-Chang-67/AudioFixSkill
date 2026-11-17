@@ -299,8 +299,11 @@ def run(work, complaint, render=True, max_variants=3, log=print):
             v["checks"] = (f"{sum(ch['pass'] for ch in vv.get('checks', []))}/{len(vv.get('checks', []))}"
                            if vv.get("checks") else "render failed: see " + os.path.join(out_dir, f"v{i}.log"))
             v["file"] = os.path.join(sub, "restored.wav")
-        _listening_file(work, c, variants, out_dir, vocal, log)
-    _write(work, complaint, cats, found, variants, out_dir)
+        zh = any("\u3040" <= ch <= "\u9fff" for ch in complaint or "")
+        _listening_file(work, c, variants, out_dir, vocal, log, zh=zh)
+        with open(os.path.join(out_dir, "variants.json"), "w") as fh:
+            json.dump({"complaint": complaint, "variants": variants}, fh, ensure_ascii=False, indent=1)
+    _write(work, complaint, cats, found, variants, out_dir, getattr(c, "where", None))
     log(f"[next] send {os.path.join(out_dir, 'ABC.wav')} with the order in investigate.md (current render, then each "
         f"variant). Tell the listener the evidence for each hypothesis in plain words, ask which version is best, then "
         f"apply its settings with restore --work {work} --set ... (investigate.md lists them)")
@@ -320,27 +323,53 @@ def _passages(c, vocal, n=4):
     return out[:n]
 
 
-def _listening_file(work, c, variants, out_dir, vocal, log):
+def _label(i, zh):
+    """The version number, spoken (espeak-ng) before its clip; without espeak-ng, i + 1 short beeps. A listener could
+    not tell four back-to-back clips apart without it."""
+    try:
+        import io
+        import soundfile as sf
+        from scipy.signal import resample_poly
+        word = ["零", "一", "二", "三", "四", "五"][i] if zh else ["zero", "one", "two", "three", "four", "five"][i]
+        p = subprocess.run(["espeak-ng", "-v", "cmn" if zh else "en", "-s", "160", "--stdout", word],
+                           capture_output=True, check=True, timeout=20)
+        z, sr = sf.read(io.BytesIO(p.stdout), dtype="float32", always_2d=True)
+        z = resample_poly(z[:, 0], SR, sr).astype(np.float32)
+    except Exception:                                                  # noqa: BLE001
+        t = np.arange(int(0.08 * SR)) / SR
+        beep = (np.sin(2 * np.pi * 1000 * t) * np.hanning(len(t))).astype(np.float32)
+        z = np.concatenate([np.concatenate([beep, np.zeros(int(0.08 * SR), np.float32)]) for _ in range(i + 1)])
+    z = z / (np.abs(z).max() + 1e-9) * 0.25
+    return np.concatenate([np.stack([z, z], axis=1), np.zeros((int(0.3 * SR), 2), np.float32)])
+
+
+def _listening_file(work, c, variants, out_dir, vocal, log, zh=True):
     files = [c.out] + [audio_io.load(v["file"]) for v in variants if os.path.exists(v.get("file", ""))]
     picks, Lp = _passages(c, vocal), 7.0
     fade = np.minimum(1, np.minimum(np.arange(int(Lp * SR)), np.arange(int(Lp * SR))[::-1]) / (0.05 * SR))[:, None]
-    parts = []
+    parts, pos, where = [], 0, []
     for t0 in picks:
         s0, s1 = int(t0 * SR), int((t0 + Lp) * SR)
         ref = loudness.integrated(files[0][s0:s1])
-        for y in files:
-            seg = y[s0:s1] * float(10 ** ((ref - loudness.integrated(y[s0:s1])) / 20))
-            parts += [seg * fade, np.zeros((int(0.6 * SR), 2), np.float32)]
+        for i, y in enumerate(files):
+            lab = _label(i, zh)
+            seg = y[s0:s1] * float(10 ** ((ref - loudness.integrated(y[s0:s1])) / 20)) * fade
+            where.append((t0, i, (pos + len(lab)) / SR))
+            for piece in (lab, seg, np.zeros((int(0.6 * SR), 2), np.float32)):
+                parts.append(piece)
+                pos += len(piece)
         parts.append(np.zeros((int(1.4 * SR), 2), np.float32))
+        pos += int(1.4 * SR)
     ab = np.vstack(parts).astype(np.float32)
     ab *= min(1.0, 0.89 / (np.abs(ab).max() + 1e-9))
     audio_io.save_wav(os.path.join(out_dir, "ABC.wav"), ab, bits=16)
-    c.picks = picks
-    log(f"[investigate] wrote {os.path.join(out_dir, 'ABC.wav')}: passages {picks}, each: current, "
-        + ", ".join(f"variant {i}" for i in range(1, len(files))))
+    c.picks, c.where = picks, where
+    log(f"[investigate] wrote {os.path.join(out_dir, 'ABC.wav')}: passages {picks}; each version is announced by its "
+        f"number, in order: current, " + ", ".join(f"variant {i}" for i in range(1, len(files))))
+    return where
 
 
-def _write(work, complaint, cats, found, variants, out_dir):
+def _write(work, complaint, cats, found, variants, out_dir, where=None):
     L = [f"# Investigation: \"{complaint}\"", "", f"Read as: {', '.join(CATEGORIES[c][0] for c in cats)}.", "",
          "## Hypotheses, strongest evidence first", ""]
     for r in found:
@@ -351,6 +380,14 @@ def _write(work, complaint, cats, found, variants, out_dir):
         L.append(f"| {i} | {v['label']} (tests: {v['why']}) | `" + " ".join(f"{k}={json.dumps(val)}"
                                                                           for k, val in v['set'].items())
                  + f"` | {v.get('checks', 'not rendered')} |")
+    if where:
+        L += ["", "Where each version starts in ABC.wav (m:ss; each clip is 7 s and is announced by its number):", "",
+              "| passage (s in the song) | " + " | ".join(f"version {i}" for i in range(len(variants) + 1)) + " |",
+              "|---|" + "---|" * (len(variants) + 1)]
+        for t0 in sorted({w[0] for w in where}, key=lambda t: [w[0] for w in where].index(t)):
+            cells = [f"{int(s // 60)}:{int(s % 60):02d}" for t, i, s in where if t == t0]
+            L.append(f"| {t0:.0f} | " + " | ".join(cells) + " |")
+        L += ["", "Full-length versions: `investigate/v<number>/restored.wav` (and .m4a); version 0 is `restored.wav`."]
     L += ["", "## Next", "", "1. Send ABC.wav. Tell the listener, in plain words, which causes the measurements point "
           "to and what each version changes.", "2. Ask which version sounds best, or whether none fixes it.",
           f"3. Apply the chosen settings: `restore --work {work} --set <settings>` and deliver as usual.",
