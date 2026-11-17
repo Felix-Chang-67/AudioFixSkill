@@ -103,6 +103,14 @@ def material(D):
             f"studio one. Its tone is still the target; check the low-end EQ and the balance against what is played")})
     if D.get("music") and ref.get("used") in ("jrock_band",) and ref.get("auto"):
         items.append({"kind": "reference", "text": f"Tone target: the generic profile. {ref.get('why', '')}"})
+    tl = D.get("tonal_lines") or []
+    if tl:
+        where = ", ".join(f"{line['hz'] / 1000:.2f} kHz" for line in tl)
+        items.append({"kind": "whistles", "text": (
+            f"{len(tl)} steady narrow tone(s) in the highs were found and notched out (15 Hz wide each): "
+            f"{where}. Codec artefacts or the codec repair's; "
+            f"left in, the restoration's lift of the highs and the band extension multiply them into a whistle or a "
+            f"digital edge. Tell the listener they were there and are gone")})
     items += missing(D)
     cr = D.get("codec_repair") or {}
     if cr.get("applied"):

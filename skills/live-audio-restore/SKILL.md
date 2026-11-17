@@ -296,7 +296,7 @@ Map what the user says to a knob, change one thing at a time, re-render and send
 
 **Music** (`references/music-path.md`):
 
-1. Repairs on the raw mix: 20 Hz high-pass, dehum, declip. On low-bitrate rips, codec repair (Apollo) first
+1. Repairs on the raw mix: 20 Hz high-pass, dehum, notches on steady codec whistles in the highs, declip. On low-bitrate rips, codec repair (Apollo) first
    refills the sparse band under the cut-off.
 2. De-limit (limited sources): the network's gain curve at 1.5-2x depth, on every stem.
 3. Polarity repair of anti-phase stems: whole reversed layers, or anti-phase in some bands only.

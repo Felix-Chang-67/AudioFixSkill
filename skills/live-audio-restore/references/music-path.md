@@ -292,10 +292,12 @@ headphones.
 6. **Fill only what is missing.** Per 20 s section (crossfaded) and per 250 Hz band, measure the existing content
    and the copy. Scale the copy so that both together reach the reference's level at that frequency, relative to the
    section's own 0.5-2 kHz level. `below_ref_db` lowers the target. Bands that already hold enough get nothing.
-7. Above the fill's start, the per-stem and overall tone matches may cut but never boost: the fill alone sets the level
+7. A band where the copy is weak, at the edge of a shifted pass, is scaled as if it held a quarter of its neighbours'
+   energy, and no band is raised more than 12 dB. A larger gain there once magnified a stray tone into a 19 kHz whistle.
+8. Above the fill's start, the per-stem and overall tone matches may cut but never boost: the fill alone sets the level
    there. On one song, a stem EQ had lifted Apollo's top before the fill, leaving 16-18 kHz 1.5-3 dB over the reference.
    The fill only adds, so it could not take that back.
-8. Without profile data for the top, the older single-gain extension (`dsp.hf_extend`) runs: one band above the
+9. Without profile data for the top, the older single-gain extension (`dsp.hf_extend`) runs: one band above the
    cut-off is matched, and the slope of the octave below continues at -6 dB.
 
 **Why fill, not one gain.** The single gain matched one band above the cut-off, so two things went wrong:
@@ -361,6 +363,7 @@ others. The overall level is left to the master.
 |---|---|
 | 20 Hz high-pass (2nd order) | Always |
 | Mains notches (Q 35) at the flagged harmonics | Hum detected |
+| 15 Hz-wide notches on steady tones in the highs (`birdies`) | Codec whistles found (diagnosis.md, "Steady tones") |
 | ffmpeg `adeclip` | Clipping detected |
 
 Stems receive the same high-pass and notches.

@@ -6,12 +6,24 @@ from . import SR, audio_io, dsp, master, music, speech, stems as S
 from .analysis import mask_of, regions
 
 
+def _birdies(y, R, log=None):
+    b = R.get("birdies") or {}
+    if not b.get("enabled"):
+        return y
+    for f0 in b["hz"]:
+        y = dsp.notch(y, f0, q=f0 / b.get("bw_hz", 15.0))
+    if log:
+        log(f"[repair] notched {len(b['hz'])} steady codec tone(s): {b['hz']} Hz")
+    return y
+
+
 def _repairs(x, R, log):
     y = dsp.highpass(x, R["highpass_hz"]["value"], order=2)
     if R.get("dehum", {}).get("enabled"):
         for k in R["dehum"]["harmonics"]:
             y = dsp.notch(y, R["dehum"]["mains_hz"] * k, q=35.0)
         log(f"[repair] notched {R['dehum']['mains_hz']} Hz x{R['dehum']['harmonics']}")
+    y = _birdies(y, R, log)
     if R.get("declip", {}).get("enabled") and audio_io.have_ffmpeg():
         p = subprocess.run(["ffmpeg", "-v", "error", "-f", "f32le", "-ar", str(SR), "-ac", "2", "-i", "-",
                             "-af", "adeclip", "-f", "f32le", "-"], input=np.ascontiguousarray(y).tobytes(),
@@ -41,6 +53,7 @@ def restore(work, plan, log=print):
             for k in list(st):
                 for h in plan["repair"]["dehum"]["harmonics"]:
                     st[k] = dsp.notch(st[k], plan["repair"]["dehum"]["mains_hz"] * h, q=35.0)
+        st = {k: _birdies(v, plan["repair"]) for k, v in st.items()}
     segs = plan["segments"]
     mus, spc = regions(segs, "music"), regions(segs, "speech")
     y_m = y_s = None

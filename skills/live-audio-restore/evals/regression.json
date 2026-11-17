@@ -6,11 +6,31 @@
    "file": "evals/restores-broadcast-song/files/broadcast_song.m4a",
    "args": [],
    "expect": [
-    {"path": "plan.music.delimit.enabled", "eq": true, "why": "limited source (LRA 0.2 LU)"},
-    {"path": "plan.music.antiphase.stems", "contains": "other", "why": "the planted anti-phase guitar layer"},
-    {"path": "plan.music.band_ext.enabled", "eq": true, "why": "AAC band limit"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS"},
-    {"path": "steps.band_ext.result_minus_target_db.*", "abs_max": 1.5, "why": "rebuilt top within 1.5 dB of the reference (pitfall 43)"}
+    {
+     "path": "plan.music.delimit.enabled",
+     "eq": true,
+     "why": "limited source (LRA 0.2 LU)"
+    },
+    {
+     "path": "plan.music.antiphase.stems",
+     "contains": "other",
+     "why": "the planted anti-phase guitar layer"
+    },
+    {
+     "path": "plan.music.band_ext.enabled",
+     "eq": true,
+     "why": "AAC band limit"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS"
+    },
+    {
+     "path": "steps.band_ext.result_minus_target_db.*",
+     "abs_max": 1.5,
+     "why": "rebuilt top within 1.5 dB of the reference (pitfall 43)"
+    }
    ]
   },
   {
@@ -18,77 +38,288 @@
    "file": "evals/tames-crowd-in-mc/files/mc_crowd.m4a",
    "args": [],
    "expect": [
-    {"path": "diagnosis.processing_segments.0.2", "eq": "speech", "why": "an MC clip is detected as speech"},
-    {"path": "plan.speech.crowd.enabled", "eq": true, "why": "cheers louder than the talk"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS, words kept"}
+    {
+     "path": "diagnosis.processing_segments.0.2",
+     "eq": "speech",
+     "why": "an MC clip is detected as speech"
+    },
+    {
+     "path": "plan.speech.crowd.enabled",
+     "eq": true,
+     "why": "cheers louder than the talk"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS, words kept"
+    }
    ]
   },
   {
    "name": "glico_broadcast",
-   "match": ["*GLICO*", "*glico*"],
-   "args": ["--content", "music", "--codec-repair", "off"],
+   "match": [
+    "*GLICO*",
+    "*glico*"
+   ],
+   "args": [
+    "--content",
+    "music",
+    "--codec-repair",
+    "off"
+   ],
    "expect": [
-    {"path": "plan.music.delimit.enabled", "eq": true, "why": "a broadcast limiter (LRA 0.7 LU, PLR 8.8, crest 10.9)"},
-    {"path": "plan.master.over1_max_pct", "eq": 8.0, "why": "limited source: loud master"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS"}
+    {
+     "path": "plan.music.delimit.enabled",
+     "eq": true,
+     "why": "a broadcast limiter (LRA 0.7 LU, PLR 8.8, crest 10.9)"
+    },
+    {
+     "path": "plan.master.over1_max_pct",
+     "eq": 8.0,
+     "why": "limited source: loud master"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS"
+    }
    ]
   },
   {
    "name": "mirror_audience",
-   "match": ["*MIRROR*"],
-   "args": ["--content", "music", "--artist", "ヒトリエ", "--title", "MIRROR"],
+   "match": [
+    "*MIRROR*"
+   ],
+   "args": [
+    "--content",
+    "music",
+    "--artist",
+    "ヒトリエ",
+    "--title",
+    "MIRROR"
+   ],
    "expect": [
-    {"path": "diagnosis.reference.used", "endswith": "song.json", "why": "the studio version is looked up"},
-    {"path": "diagnosis.reference_section.start_s", "approx": 32.5, "tol": 4, "why": "the preview's passage (chorus) found"},
-    {"path": "diagnosis.reference_section.similarity", "min": 0.6, "why": "same song: 0.67 at calibration"},
-    {"path": "plan.music.macro.enabled", "eq": true, "why": "open recording (LRA 9.9 LU)"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS"},
-    {"path": "steps.band_ext.result_minus_target_db.*", "abs_max": 1.5, "why": "rebuilt top within 1.5 dB of the studio version"}
+    {
+     "path": "diagnosis.reference.used",
+     "endswith": "song.json",
+     "why": "the studio version is looked up"
+    },
+    {
+     "path": "diagnosis.reference_section.start_s",
+     "approx": 32.5,
+     "tol": 4,
+     "why": "the preview's passage (chorus) found"
+    },
+    {
+     "path": "diagnosis.reference_section.similarity",
+     "min": 0.6,
+     "why": "same song: 0.67 at calibration"
+    },
+    {
+     "path": "plan.music.macro.enabled",
+     "eq": true,
+     "why": "open recording (LRA 9.9 LU)"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS"
+    },
+    {
+     "path": "steps.band_ext.result_minus_target_db.*",
+     "abs_max": 1.5,
+     "why": "rebuilt top within 1.5 dB of the studio version"
+    },
+    {
+     "path": "plan.repair.birdies.enabled",
+     "info": true,
+     "why": "the codec repair's own steady lines (17-20 kHz)"
+    }
    ]
   },
   {
    "name": "mc14_talk",
-   "match": ["*14*MC*", "*MC*14*"],
-   "args": ["--content", "speech"],
+   "match": [
+    "*14*MC*",
+    "*MC*14*"
+   ],
+   "args": [
+    "--content",
+    "speech"
+   ],
    "expect": [
-    {"path": "plan.speech.crowd.enabled", "eq": true, "why": "cheering 5.6 dB over the talk"},
-    {"path": "verify.warns", "max": 0, "why": "crowd under the talk, words kept"}
+    {
+     "path": "plan.speech.crowd.enabled",
+     "eq": true,
+     "why": "cheering 5.6 dB over the talk"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "crowd under the talk, words kept"
+    }
    ]
   },
   {
    "name": "tsumiki_codec",
-   "match": ["*積み木の人形*", "*tsumiki*"],
-   "args": ["--content", "music"],
+   "match": [
+    "*積み木の人形*",
+    "*tsumiki*"
+   ],
+   "args": [
+    "--content",
+    "music"
+   ],
    "expect": [
-    {"path": "diagnosis.codec_repair.codec_damage", "eq": true, "why": "MP3-style low-pass with a sparse band (pitfall 37)"},
-    {"path": "plan.music.macro.enabled", "eq": true, "why": "open recording (LRA 18.7 LU)"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS"},
-    {"path": "steps.band_ext.result_minus_target_db.*", "abs_max": 1.5, "why": "rebuilt top within 1.5 dB of the reference"},
-    {"path": "diagnosis.reference.used", "info": true, "why": "no studio version on iTunes when the baseline was made"}
+    {
+     "path": "diagnosis.codec_repair.codec_damage",
+     "eq": true,
+     "why": "MP3-style low-pass with a sparse band (pitfall 37)"
+    },
+    {
+     "path": "plan.music.macro.enabled",
+     "eq": true,
+     "why": "open recording (LRA 18.7 LU)"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS"
+    },
+    {
+     "path": "steps.band_ext.result_minus_target_db.*",
+     "abs_max": 1.5,
+     "why": "rebuilt top within 1.5 dB of the reference"
+    },
+    {
+     "path": "diagnosis.reference.used",
+     "info": true,
+     "why": "no studio version on iTunes when the baseline was made"
+    },
+    {
+     "path": "plan.repair.birdies.enabled",
+     "info": true,
+     "why": "the codec repair's own steady lines (17-20 kHz)"
+    }
    ]
   },
   {
    "name": "tenohira_acoustic",
-   "match": ["*テノヒラ*", "*tenohira*"],
-   "args": ["--content", "music"],
+   "match": [
+    "*テノヒラ*",
+    "*tenohira*"
+   ],
+   "args": [
+    "--content",
+    "music"
+   ],
    "expect": [
-    {"path": "review.kinds", "contains": "applause", "why": "applause at 285-330 s"},
-    {"path": "review.kinds", "contains": "arrangement", "why": "no drums: a stripped-down arrangement (pitfall 41)"},
-    {"path": "steps.balance.0.drums_absent", "max": -30, "why": "balance moved nothing (no applause raised)"},
-    {"path": "plan_used.music.dynamics.vocals.0", "eq": 1.0, "why": "the crest WARN fixed by the autofix: vocal compression off"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS after the autofix"},
-    {"path": "steps.band_ext.result_minus_target_db.*", "abs_max": 1.5, "why": "no notch above a moving cut-off (pitfall 43)"}
+    {
+     "path": "review.kinds",
+     "contains": "applause",
+     "why": "applause at 285-330 s"
+    },
+    {
+     "path": "review.kinds",
+     "contains": "arrangement",
+     "why": "no drums: a stripped-down arrangement (pitfall 41)"
+    },
+    {
+     "path": "steps.balance.0.drums_absent",
+     "max": -30,
+     "why": "balance moved nothing (no applause raised)"
+    },
+    {
+     "path": "plan_used.music.dynamics.vocals.0",
+     "eq": 1.0,
+     "why": "the crest WARN fixed by the autofix: vocal compression off"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS after the autofix"
+    },
+    {
+     "path": "steps.band_ext.result_minus_target_db.*",
+     "abs_max": 1.5,
+     "why": "no notch above a moving cut-off (pitfall 43)"
+    },
+    {
+     "path": "plan.repair.birdies.enabled",
+     "info": true,
+     "why": "the codec repair's own steady lines (17-20 kHz)"
+    }
    ]
   },
   {
    "name": "shatterdoll_dense",
-   "match": ["*シャッタードール*", "*shatter*"],
-   "args": ["--content", "music"],
+   "match": [
+    "*シャッタードール*",
+    "*shatter*"
+   ],
+   "args": [
+    "--content",
+    "music"
+   ],
    "expect": [
-    {"path": "plan.music.delimit.enabled", "eq": false, "why": "dense, not limited: PLR 10.9 but crest 13.6 (pitfall 44)"},
-    {"path": "verify.output.loudness.lra_lu", "min": 5.5, "why": "its 6.6 LU range kept"},
-    {"path": "verify.warns", "max": 0, "why": "all checks PASS with no hand edits"},
-    {"path": "steps.band_ext.result_minus_target_db.*", "abs_max": 1.5, "why": "rebuilt top within 1.5 dB of the studio version"}
+    {
+     "path": "plan.music.delimit.enabled",
+     "eq": false,
+     "why": "dense, not limited: PLR 10.9 but crest 13.6 (pitfall 44)"
+    },
+    {
+     "path": "verify.output.loudness.lra_lu",
+     "min": 5.5,
+     "why": "its 6.6 LU range kept"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS with no hand edits"
+    },
+    {
+     "path": "steps.band_ext.result_minus_target_db.*",
+     "abs_max": 1.5,
+     "why": "rebuilt top within 1.5 dB of the studio version"
+    },
+    {
+     "path": "plan.repair.birdies.enabled",
+     "info": true,
+     "why": "the codec repair's own steady lines (17-20 kHz)"
+    }
+   ]
+  },
+  {
+   "name": "skg_heaac_whistles",
+   "match": [
+    "*Shanghai*Kungfu*",
+    "*shanghai*kungfu*"
+   ],
+   "args": [
+    "--content",
+    "music"
+   ],
+   "expect": [
+    {
+     "path": "plan.repair.birdies.enabled",
+     "eq": true,
+     "why": "four steady codec whistles at 8.44-10.51 kHz (pitfall 45)"
+    },
+    {
+     "path": "plan.music.delimit.enabled",
+     "eq": true,
+     "why": "limited (LRA 2.4 LU)"
+    },
+    {
+     "path": "verify.warns",
+     "max": 0,
+     "why": "all checks PASS"
+    },
+    {
+     "path": "steps.band_ext.result_minus_target_db.*",
+     "abs_max": 2.0,
+     "why": "rebuilt top near the reference, no 19 kHz bump"
+    }
    ]
   }
  ]

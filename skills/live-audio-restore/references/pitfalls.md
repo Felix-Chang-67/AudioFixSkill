@@ -219,3 +219,11 @@ The same audience recording was restored twice with this skill: once by Claude, 
       song with a 13.6 dB crest and a 6.7 LU range, where the De-limiter found 0.1 dB of limiting. Its range went to
       3.1 LU.
     - Now: a low PLR counts only with a 3 s crest under 12.5 dB.
+45. **A codec's whistles, restored with the music, are louder than before.**
+    - What happened: a 50 kb/s HE-AAC rip had four steady tones at 8.44-10.51 kHz, 689 Hz apart, 14-19 dB over
+      their neighbours. The restoration raised that band by about 10 dB, and the band extension copied one tone up to
+      19.1 kHz, where a weak band's large fill gain made it 12 dB louder still. The listener heard a "digital feel"
+      again.
+    - Apollo's output carried 3-5 steady lines of its own at 17-20.1 kHz on every song.
+    - Now: steady tones in the highs are found during analysis and notched out (15 Hz wide) on the mix and the stems,
+      before anything is boosted or copied. Fill gains are capped at 12 dB, and weak bands are not singled out.

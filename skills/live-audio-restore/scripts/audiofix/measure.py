@@ -59,6 +59,47 @@ def hum(y):
     return {"mains_hz": best, "excess_db": [round(e, 1) for e in ex], "present": bool(present)}
 
 
+def tonal_lines(y, lo=4000.0, hi=20800.0, min_excess_db=8.0, min_presence=0.6, top_presence=0.45, max_lines=24):
+    """Steady narrow tones in the highs: codec artefacts ("birdies"), heard as a whistle or a digital edge.
+
+    A low-bitrate HE-AAC rip carried a comb of lines at 8.44, 9.13, 9.82 and 10.51 kHz (689 Hz apart, 11-18 dB over
+    their neighbours) through the whole song; the codec repair added more at 16.6-20.1 kHz. Music has no tone that
+    stays put in the top octave for most of a song, so a line counts when it stands min_excess_db over its +-160 Hz
+    neighbourhood in the long-term spectrum and at least 6 dB over its neighbours in min_presence of the frames
+    (top_presence above 12 kHz, where the codec repair's weaker lines sit and music has no steady tone at all)."""
+    from scipy.signal import find_peaks, stft
+    m = y.mean(axis=1) if y.ndim == 2 else y
+    f, P = welch(m, SR, nperseg=16384)
+    d = 10 * np.log10(P + 1e-30)
+    ex = d - median_filter(d, size=121)
+    sel = (f >= lo) & (f <= hi)
+    idx, _ = find_peaks(np.where(sel, ex, -99), height=min_excess_db, distance=6)
+    if not len(idx):
+        return []
+    # spread the time check over the file: up to 8 x 15 s
+    n = len(m)
+    seg = int(15 * SR)
+    starts = np.linspace(0, max(0, n - seg), min(8, max(1, n // seg))).astype(int)
+    frames = []
+    for s in starts:
+        ff, _, Z = stft(m[s:s + seg], SR, nperseg=8192, noverlap=4096)
+        frames.append(np.abs(Z))
+    A = 20 * np.log10(np.concatenate(frames, axis=1) + 1e-12)
+    df = ff[1] - ff[0]
+    out = []
+    for i in idx[np.argsort(-ex[idx])][:max_lines]:
+        k = int(round(f[i] / df))
+        if k < 22 or k > len(ff) - 22:
+            continue
+        line = A[k - 1:k + 2].max(axis=0)
+        nb = np.median(np.concatenate([A[k - 20:k - 5], A[k + 6:k + 21]]), axis=0)
+        loud = A[k - 20:k + 21].max(axis=0) > A.max() - 80
+        pres = float(np.mean((line - nb > 6)[loud])) if loud.any() else 0.0
+        if pres >= (top_presence if f[i] >= 12000 else min_presence):
+            out.append({"hz": round(float(f[i]), 1), "excess_db": round(float(ex[i]), 1), "presence": round(pres, 2)})
+    return sorted(out, key=lambda r: r["hz"])
+
+
 def bandwidth(y):
     """Highest frequency with real content, and whether it ends in a codec-style brick wall."""
     f, P = welch(y.mean(axis=1), SR, nperseg=8192)

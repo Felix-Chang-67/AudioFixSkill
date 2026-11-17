@@ -76,6 +76,23 @@ The measure takes the peak at 50 or 60 Hz and its first six harmonics, minus the
 - The fix is notch filters (Q 35) on every harmonic at 6 dB or more.
 - Small excesses (2-6 dB) are normal. Bass notes land on those frequencies too.
 
+### Steady tones in the highs (codec whistles)
+
+The measure looks at the highs, 4-20.8 kHz, on the signal the render uses (after codec repair). It finds narrow
+lines that stand 8 dB or more over their +-160 Hz neighbourhood in the long-term spectrum. A line counts if it also
+stands 6 dB over its neighbours in at least 60 % of the frames, or 45 % above 12 kHz.
+
+- **Why it matters.** Music holds no tone at a fixed frequency in the top octaves for most of a song; a low-bitrate
+  encoder does.
+- **Example.** A 50 kb/s HE-AAC rip carried four lines at 8.44, 9.13, 9.82 and 10.51 kHz, 689 Hz apart and 14-19 dB
+  over their neighbours, through the whole song.
+  - The restoration's lift of the highs raised them by about 10 dB.
+  - The band extension copied the 10.51 kHz one up to 13.2, 16.6 and 19.1 kHz.
+  - The listener heard a "digital feel".
+- **Codec repair adds its own.** Apollo's output carried 3-5 lines at 17-20.1 kHz on every song it processed.
+- **The fix.** A 15 Hz-wide notch on each line (`repair.birdies`), on the mix and on every stem, before anything is
+  boosted or copied up. The four lines took 1.3 dB of the 8-11 kHz band with them.
+
 ### Bandwidth and codec notches
 
 The measure finds the highest frequency within 45 dB of the 1-4 kHz level, and the drop across that edge.

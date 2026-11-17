@@ -47,6 +47,12 @@ def build(D):
                              f"the spectrum (rule: fundamental >= 10 dB or two harmonics >= 8 dB)"}
     else:
         R["dehum"] = {"enabled": False, "why": f"no mains hum (largest excess {max(h['excess_db']):.0f} dB)"}
+    tl = D.get("tonal_lines") or []
+    R["birdies"] = {"enabled": bool(tl), "hz": [l["hz"] for l in tl], "bw_hz": 15.0,
+                    "why": (f"{len(tl)} steady narrow tone(s) in the highs, {[(l['hz'], l['excess_db']) for l in tl]} "
+                            f"(Hz, dB over the neighbourhood), present in most of the song: codec artefacts or the codec "
+                            f"repair's, heard as a whistle or a digital edge. Each is notched out 15 Hz wide before "
+                            f"anything is boosted or copied up" if tl else "no steady narrow tones in the highs")}
     c = D["clipping"]
     clipped = c["flat_runs_per_min"] >= 20
     R["declip"] = {"enabled": bool(clipped and cap["ffmpeg"]),

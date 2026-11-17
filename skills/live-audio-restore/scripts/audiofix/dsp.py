@@ -388,7 +388,7 @@ def _psd2(y, nper=4096):
 
 
 def hf_fill(y, start, rel_db_at, top=19500.0, below_db=0.0, noise_mix=0.5, section_s=20.0, band_hz=250.0,
-            max_gain_db=24.0, taps=4095):
+            max_gain_db=12.0, taps=4095):
     """Rebuild the top above `start` toward the reference's spectrum, adding only what is missing.
 
     The material is the SSB copy (half of it noise-like, as real air is dense). Then, per section (crossfaded, so a
@@ -424,12 +424,14 @@ def hf_fill(y, start, rel_db_at, top=19500.0, below_db=0.0, noise_mix=0.5, secti
         ref = py[(f >= 500) & (f <= 2000)].mean()
         g = np.zeros(len(centres))
         if ref > 1e-14:
-            for j, lo in enumerate(lows):
-                s = (f >= lo) & (f < lo + band_hz)
-                need = ref * 10 ** (tgt[j] / 10) - py[s].mean()
-                e = pe[s].mean()
-                if need > 0 and e > 1e-30:
-                    g[j] = min(float(np.sqrt(need / e)), cap)
+            need = np.array([ref * 10 ** (tgt[j] / 10) - py[(f >= lo) & (f < lo + band_hz)].mean()
+                             for j, lo in enumerate(lows)])
+            e = np.array([pe[(f >= lo) & (f < lo + band_hz)].mean() for lo in lows])
+            # a band where the copy is weak (a pass edge) is scaled as if it held a quarter of its neighbours' energy:
+            # a huge gain there only magnified a stray tone into a 19 kHz whistle
+            e = np.maximum(e, uniform_filter1d(e, 5, mode="nearest") / 4)
+            ok = (need > 0) & (e > 1e-30)
+            g[ok] = np.minimum(np.sqrt(need[ok] / e[ok]), cap)
         g = np.convolve(g, np.ones(3) / 3, mode="same")                  # no band switches on or off alone
         used.append(g)
         freq = np.concatenate([[0.0, start - band_hz], centres, [top + band_hz, SR / 2]])
@@ -439,9 +441,10 @@ def hf_fill(y, start, rel_db_at, top=19500.0, below_db=0.0, noise_mix=0.5, secti
     f, po = _psd2(out, 8192)
     ref = po[(f >= 500) & (f <= 2000)].mean()
     dev = {}
-    for c0 in range(int(np.ceil(start / 1000.0) * 1000), int(top) - 500, 1000):
-        s = (f >= c0) & (f < c0 + 1000)
-        dev[str(c0)] = round(float(10 * np.log10(po[s].mean() / ref + 1e-30) - (rel_db_at(c0 + 500) - below_db)), 1)
+    for c0 in range(int(np.ceil(start / 1000.0) * 1000), int(top), 1000):
+        s = (f >= c0) & (f < min(c0 + 1000, top))
+        dev[str(c0)] = round(float(10 * np.log10(po[s].mean() / ref + 1e-30)
+                                   - (rel_db_at((c0 + min(c0 + 1000, top)) / 2) - below_db)), 1)
     return out, {"applied": True, "start_hz": round(float(start)), "passes": passes, "sections": k,
                  "bands_filled_pct": round(float(np.mean(np.array(used) > 1e-3) * 100), 1),
                  "result_minus_target_db": dev}

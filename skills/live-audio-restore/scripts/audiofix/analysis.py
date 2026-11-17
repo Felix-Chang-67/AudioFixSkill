@@ -107,6 +107,12 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
     elif want:
         D["codec_repair"]["why"] += "; Apollo is not installed (bash scripts/setup.sh), the band is used as it is"
 
+    # steady narrow tones in the highs (codec artefacts, and the codec repair's own): notched out before anything is
+    # boosted or copied up, or the band extension multiplies them
+    D["tonal_lines"] = measure.tonal_lines(x)
+    if D["tonal_lines"]:
+        log(f"[analyze] steady narrow tones (codec artefacts): {[(l['hz'], l['excess_db']) for l in D['tonal_lines']]}")
+
     st = None
     if use_stems and cap["stems"]:
         log("[analyze] separating stems (demucs htdemucs) ...")
