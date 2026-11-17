@@ -101,8 +101,11 @@ def material(D):
             f"The studio version matched the recording only weakly (chroma correlation {rs['similarity']} at "
             f"{rs['start_s']}-{rs['end_s']} s; same songs scored 0.46-0.67): the live arrangement may differ from the "
             f"studio one. Its tone is still the target; check the low-end EQ and the balance against what is played")})
-    if D.get("music") and ref.get("used") in ("jrock_band",) and ref.get("auto"):
-        items.append({"kind": "reference", "text": f"Tone target: the generic profile. {ref.get('why', '')}"})
+    if D.get("music") and ref.get("used") in ("jrock_band",):
+        items.append({"kind": "reference", "text": (
+            f"Tone target: the generic profile, not this song's studio version ({ref.get('why', '')}). Accepted with "
+            f"--generic-reference: {ref.get('generic_ok', 'no reason recorded')}. Tell the listener the tone follows a "
+            f"genre average, and that the studio track (any copy) would give a closer target")})
     for s in D.get("sbr_copies") or []:
         items.append({"kind": "whistles", "text": (
             f"The top band {s['band_hz'][0] / 1000:.1f}-{s['band_hz'][1] / 1000:.1f} kHz was a copy of the low band "

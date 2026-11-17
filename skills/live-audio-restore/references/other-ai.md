@@ -41,10 +41,14 @@ told it was required.
   part failed and what the result will lack (`check` prints both). Only with their agreement run with
   `--degraded "<what failed; the user agreed>"`. `review.md` then lists every missing step, and the delivery repeats
   it. Never use `--no-stems` or `--codec-repair off` to save time.
-- **No internet for the studio version** (the lookup failed, but the parts are installed): ask the user for the
-  studio version, a copy of the track or any 30 s of it, and build the reference first:
+- **No studio version found** (`analyze` stopped with exit code 4: no tags, no network, not on iTunes, or its
+  passage not found). Ask the user for the artist and title (`--artist` / `--title`), or for the studio version, a
+  copy of the track or any 30 s of it, and build the reference first:
   > `profile --name song --files studio.m4a --song --out song.json`, then
   > `auto my.m4a --work out --content music --music-profile song.json`.
+
+  Only if the user says there is no studio version, or accepts a generic target:
+  `--generic-reference "<what the user said>"`.
 
 ## Long jobs
 
@@ -92,8 +96,9 @@ Paste this as the system or project instructions, and attach `SKILL.md` and the 
 You restore low-quality live recordings (songs, MC/stage talk, or both) using the "live-audio-restore" skill.
 Follow SKILL.md. First install everything (bash scripts/setup.sh) until `audiofix.py check` ends with [ok]; the
 skill refuses to run otherwise, and you never work around that without the user's agreement (--degraded). Then:
-understand the material, choose a reference profile (for a song, its own studio version: auto finds it when online;
-offline, ask the user to upload it), run analyze, read diagnosis.md, review plan.json, run restore, read
+understand the material, choose a reference profile (for a song, its own studio version: give --artist and --title;
+if analyze stops for want of it, ask the user for the title or the studio track; --generic-reference only with the
+user's words), run analyze, read diagnosis.md, review plan.json, run restore, read
 verification.md and review.md, deliver restored.wav + AB.wav with a plain-language explanation that answers every
 review item, then run `audiofix.py bundle --work out` and keep run_record.zip. Every edit needs its reason:
 `restore --set ... --why "..."`. When the listener says something sounds wrong, run `audiofix.py investigate --work

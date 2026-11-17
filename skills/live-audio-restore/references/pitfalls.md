@@ -263,3 +263,10 @@ The same audience recording was restored twice with this skill: once by Claude, 
     - Now: every setting that differs from `plan_default.json` needs `--why`, or `restore` stops (exit code 2); the
       reasons are kept in `plan_used.json` and listed in `review.md`. `commands.jsonl` records every command, and
       `bundle` packs the run's text record (no audio). `compare` lines two records up and names where they part.
+51. **An untagged song was matched to the generic profile without anyone deciding it.**
+    - What happened: a screen-captured song had no tags. With `--artist` / `--title` the studio version was found and
+      became the target; without them the run went on with the generic profile and only printed a `[next]` line,
+      which an assistant could skip. Same file, two different tones, depending on who ran it.
+    - Now: a song whose studio version is not found stops `analyze` (exit code 4), before the slow steps when the
+      content is known. The generic profile needs `--generic-reference "<what the user said>"`, kept in
+      `review.md`.

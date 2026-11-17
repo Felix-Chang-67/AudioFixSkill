@@ -27,8 +27,12 @@ any language (for example 修复 / 精修 / 音质 / 现场录音).
    - For a song, `auto` looks up the studio version of that very song online and makes it the tone target. It reads
      the artist and title from the file's tags, or from `--artist` / `--title`, and fetches the official iTunes
      preview. It drops the preview if its passage is not found in the recording.
-   - Without network, tags or a match, it falls back to the bundled profile and prints a `[next]` line. Then ask the
-     user for the studio track (`references/other-ai.md`).
+   - If that fails (no tags and no `--artist` / `--title`, no network, not on iTunes, or its passage not found),
+     `analyze` and `auto` stop with exit code 4. Ask the user for the artist and title, or for the studio track
+     (`profile --name S --files STUDIO --song --out S.json`, then `--music-profile S.json`).
+   - Only when the user says there is no studio version (an arrangement, a cover, unreleased) or accepts a generic
+     target, run with `--generic-reference "<what the user said>"`, and say in the delivery that the tone follows a
+     genre average.
 3. Read the right reference at the right time:
    - `references/diagnosis.md` before you interpret `diagnosis.md`;
    - `references/tuning.md` when the user gives listening feedback;

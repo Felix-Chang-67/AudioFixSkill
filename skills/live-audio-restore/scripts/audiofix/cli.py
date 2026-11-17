@@ -91,10 +91,17 @@ def _analyze(a, log):
     if getattr(a, "asr_model", None):
         os.environ["AUDIOFIX_ASR_MODEL"] = a.asr_model
     degraded = _require(a, log)
-    D = analysis.run(a.input, a.work, a.content, a.music_profile, a.speech_profile, not a.no_stems, log,
-                     codec_repair=getattr(a, "codec_repair", "auto"),
-                     lookup={"artist": a.artist, "title": a.title, "country": a.country, "lookup": not a.no_lookup},
-                     degraded=degraded)
+    generic_ok = (getattr(a, "generic_reference", None) or "").strip() or None
+    try:
+        D = analysis.run(a.input, a.work, a.content, a.music_profile, a.speech_profile, not a.no_stems, log,
+                         codec_repair=getattr(a, "codec_repair", "auto"),
+                         lookup={"artist": a.artist, "title": a.title, "country": a.country,
+                                 "lookup": not a.no_lookup}, degraded=degraded, generic_ok=generic_ok)
+    except reference.NoStudioReference as e:
+        _stop_reference(str(e), log)
+    ref = D.get("reference") or {}
+    if D.get("music") and ref.get("used") == reference.DEFAULT and not generic_ok:
+        _stop_reference(ref.get("why", ""), log)
     P = PL.build(D)
     PL.save(P, os.path.join(a.work, "plan.json"))
     PL.save(P, os.path.join(a.work, "plan_default.json"))   # what the rules decided; every difference needs a reason
@@ -120,15 +127,28 @@ def _analyze(a, log):
     return D, P
 
 
+def _stop_reference(why, log):
+    """A song is not restored against the generic profile unless the listener accepted it."""
+    log(f"[stop] this is a song, and its tone target would be the bundled generic profile: {why}.")
+    log("[stop] The studio version of this very song is the target the skill is built around: an assistant that "
+        "went on with the generic profile delivered a different tone from one that used the studio version, on the "
+        "same file. Do one of these, then run the same command again (the slow steps are cached):")
+    log("[stop]   1. Ask the user for the artist and the title, and pass --artist \"...\" --title \"...\".")
+    log("[stop]   2. No internet, or the song is not on iTunes: ask the user for the studio track (any copy, or 30 s of "
+        "it), run `profile --name S --files STUDIO --song --out S.json`, then pass --music-profile S.json.")
+    log("[stop]   3. Only if the user says there is no studio version (an arrangement, a cover, unreleased) or agrees "
+        "to the generic target: pass --generic-reference \"<what the user said>\".")
+    sys.exit(4)
+
+
 def _reference_hint(P):
     """A [next] line when a song was matched to the generic profile: its own studio version is the better target."""
     ref = P.get("reference") or {}
-    if not P.get("music") or not ref.get("auto") or ref.get("used") != reference.DEFAULT:
+    if not P.get("music") or ref.get("used") != reference.DEFAULT:
         return None
-    return ("[next] the tone target was the bundled generic profile (" + ref.get("why", "") + "). The studio "
-            "version of this very song is the best target: rerun with --artist and --title if the tags lack them, "
-            "or ask the listener for the studio track and run `profile --name S --files STUDIO --song --out S.json`, "
-            "then `auto INPUT --work WORK --music-profile S.json`")
+    return ("[next] the tone target is the bundled generic profile (" + ref.get("why", "") + "; accepted: "
+            + str(ref.get("generic_ok")) + "). Say so in the delivery: the tone follows a genre average, not this "
+            "song's studio version")
 
 
 KEEP = ("restored.wav", "restored.m4a", "AB.wav", "compare.png", "verification.md", "verification.json", "master.json",
@@ -338,6 +358,9 @@ def main(argv=None):
         q.add_argument("--speech-profile", default="speech_ltass")
         q.add_argument("--no-stems", action="store_true",
                        help="skip stem separation (mix-only fallbacks); allowed only with --degraded")
+        q.add_argument("--generic-reference", metavar="WHY",
+                       help="restore a song against the bundled generic profile: only when the user said there is "
+                            "no studio version, or agreed (otherwise a song with no studio reference stops)")
         q.add_argument("--degraded", metavar="WHY",
                        help="run without the parts check reports missing, after the user agreed: what failed to "
                             "install and that the user accepts a reduced result (shown in review.md)")

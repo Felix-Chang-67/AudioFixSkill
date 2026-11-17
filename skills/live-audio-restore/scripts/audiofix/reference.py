@@ -12,6 +12,10 @@ import json, os, re
 from . import profiles
 
 DEFAULT = "jrock_band"
+
+
+class NoStudioReference(Exception):
+    """A song would be matched to the generic profile; the listener has not accepted that (--generic-reference)."""
 NOT_SONGS = re.compile(r"^(mc|ｍｃ|talk|トーク|se|opening|intro|outro|encore|アンコール)\s*\d*$", re.I)
 
 

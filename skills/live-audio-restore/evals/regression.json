@@ -4,7 +4,10 @@
   {
    "name": "broadcast_song",
    "file": "evals/restores-broadcast-song/files/broadcast_song.m4a",
-   "args": [],
+   "args": [
+    "--generic-reference",
+    "synthetic test song: no studio version exists"
+   ],
    "expect": [
     {
      "path": "plan.music.delimit.enabled",
@@ -35,6 +38,11 @@
      "path": "plan.repair.sbr_copies.enabled",
      "eq": false,
      "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
+    },
+    {
+     "path": "diagnosis.reference.generic_ok",
+     "eq": "synthetic test song: no studio version exists",
+     "why": "a song on the generic profile only with the user's acceptance recorded (pitfall 51)"
     }
    ]
   },
@@ -75,7 +83,9 @@
     "--content",
     "music",
     "--codec-repair",
-    "off"
+    "off",
+    "--generic-reference",
+    "broadcast rip with no tags; baseline made against the generic profile"
    ],
    "expect": [
     {
@@ -97,6 +107,11 @@
      "path": "plan.repair.sbr_copies.enabled",
      "eq": true,
      "why": "a 48 kHz HE-AAC broadcast: 7.5-14 kHz is the low band shifted up 6750 Hz (pitfall 47)"
+    },
+    {
+     "path": "diagnosis.reference.generic_ok",
+     "eq": "broadcast rip with no tags; baseline made against the generic profile",
+     "why": "a song on the generic profile only with the user's acceptance recorded (pitfall 51)"
     }
    ]
   },
@@ -193,7 +208,9 @@
    ],
    "args": [
     "--content",
-    "music"
+    "music",
+    "--generic-reference",
+    "not on iTunes when the baseline was made"
    ],
    "expect": [
     {
@@ -230,6 +247,11 @@
      "path": "plan.repair.sbr_copies.enabled",
      "eq": false,
      "why": "no band replication: the highs are not a shifted copy of the low band (pitfall 47)"
+    },
+    {
+     "path": "diagnosis.reference.generic_ok",
+     "eq": "not on iTunes when the baseline was made",
+     "why": "a song on the generic profile only with the user's acceptance recorded (pitfall 51)"
     }
    ]
   },
@@ -337,7 +359,9 @@
    ],
    "args": [
     "--content",
-    "music"
+    "music",
+    "--generic-reference",
+    "a Touhou arrangement: no studio version (the user said)"
    ],
    "expect": [
     {
@@ -381,6 +405,11 @@
      "path": "steps.band_ext.result_minus_target_db.*",
      "abs_max": 2.0,
      "why": "rebuilt top near the reference, no 19 kHz bump"
+    },
+    {
+     "path": "diagnosis.reference.generic_ok",
+     "eq": "a Touhou arrangement: no studio version (the user said)",
+     "why": "a song on the generic profile only with the user's acceptance recorded (pitfall 51)"
     }
    ]
   }

@@ -33,7 +33,7 @@ def cat_frames(act, regs, hop):
 
 
 def run(input_path, work, content="auto", music_profile=None, speech_profile="speech_ltass",
-        use_stems=True, log=print, codec_repair="auto", lookup=None, degraded=None):
+        use_stems=True, log=print, codec_repair="auto", lookup=None, degraded=None, generic_ok=None):
     """music_profile None: the studio version of this song, looked up online from the tags or lookup's
     artist / title (see reference.py), else the bundled default. lookup: {artist, title, country, lookup}."""
     os.makedirs(work, exist_ok=True)
@@ -60,6 +60,8 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
         D["profiles"]["music"], D["reference"] = reference.find(
             src.get("tags", {}), work, artist=lk.get("artist"), title=lk.get("title"), country=lk.get("country"),
             lookup=lk.get("lookup", True), with_stems=use_stems and cap["stems"], log=log)
+    if content == "music" and D["reference"]["used"] == reference.DEFAULT and not generic_ok:
+        raise reference.NoStudioReference(D["reference"].get("why", ""))      # stop before the long steps
 
     D["loudness"] = loudness.summary(x)
     D["clipping"] = measure.clipping(x)
@@ -240,6 +242,8 @@ def run(input_path, work, content="auto", music_profile=None, speech_profile="sp
         Sp["tonal"] = measure.tonal_deviation(voice, sprof["ltas"], vb, lo=100)
         D["speech"] = Sp
         log(f"[analyze] speech: {Sp['loudness']}, {Sp['metrics']}, talker detection {vad}")
+    if generic_ok and D.get("music") and D["reference"].get("used") == reference.DEFAULT:
+        D["reference"]["generic_ok"] = generic_ok
     D["analysis_seconds"] = round(time.time() - t0, 1)
     with open(os.path.join(work, "diagnosis.json"), "w") as fh:
         json.dump(D, fh, ensure_ascii=False, indent=1, default=float)

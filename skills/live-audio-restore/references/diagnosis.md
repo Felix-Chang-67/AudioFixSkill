@@ -282,8 +282,10 @@ Best of all is the studio version of the very song. `analyze` and `auto` look it
   and titles such as MC or SE are skipped.
 - **Stores:** tried in an order set by the script of the names. Kana → jp, us; hangul → kr, us; ideographs → jp, tw,
   hk, cn, us; otherwise us, gb, jp. `--country` puts one first.
-- **Fallback:** offline, untagged or not found means the bundled profile, with a `[next]` line asking for the studio
-  track: `profile --files TRACK --song`. By hand: `profile --itunes-artist ARTIST --itunes-song TITLE`.
+- **No studio version found** (offline, untagged, not on iTunes, or its passage not in the recording): `analyze`
+  stops with exit code 4 and asks for the artist and title or the studio track (`profile --files TRACK --song`; by
+  hand: `profile --itunes-artist ARTIST --itunes-song TITLE`). The bundled profile is used only with
+  `--generic-reference "<what the user said>"`, when there is no studio version or the user accepts it.
 
 On an audience recording, the artist's 27-song average left 100-400 Hz 5-12 dB under that song's own studio
 master. Songs differ: that one has a loud bass. Its own 30 s preview brought the section within ±3 dB.
@@ -304,8 +306,8 @@ brought the mix within 1.7 dB RMS of the studio master in that passage, against 
 - Calibration on four live recordings and two previews: the same song scored 0.46 and 0.67, other songs at most
   0.24. The raw cosine used before scored 0.82-0.91 for every pair, silence included, and accepted a wrong song at
   0.91.
-- A looked-up preview whose passage is not found is dropped for the bundled profile. A wrong song or another
-  arrangement is a worse target than the generic one.
+- A looked-up preview whose passage is not found is dropped: a wrong song or another arrangement is a worse target
+  than the generic one. The run then stops as above, and the user decides.
 
 `--itunes-song` keeps the studio version: an exact title match without "live", "remix", "instrumental" and
 the like. The first try picked up a live-album version too.

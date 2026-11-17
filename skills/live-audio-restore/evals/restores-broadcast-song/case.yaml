@@ -9,6 +9,8 @@ expected_outcome: |
   missing), the polarity repair and the band extension. The run produces a restored WAV and a
   loudness-matched A/B file, and the verification shows every check as PASS, or each WARN is
   explained. The final message is in Chinese, quotes measured before/after numbers, does not claim
-  to have listened, and asks the user to listen to the A/B file.
+  to have listened, and asks the user to listen to the A/B file. The user said the song has no
+  studio version, so the run uses --generic-reference with that reason, and the message says the
+  tone follows a genre average.
 context:
   scaffold_script: place-files.sh

@@ -153,9 +153,20 @@ The **reference** decides what "good" means for the tone, so pick it deliberatel
 | Neither | Bundled `jrock_band` (guitar band, loud modern master). For other genres, build a profile from any representative studio tracks the user can supply |
 | Speech | Bundled `speech_ltass` (long-term average speech spectrum), used automatically |
 
-`analyze` logs which reference it used and why (`[reference]` lines and `diagnosis.md`). If a song ended up on the
-generic profile, a `[next]` line says so. Ask the user for the studio version rather than delivering silently.
-`--music-profile` chooses the reference yourself; `--no-lookup` keeps everything offline.
+`analyze` logs which reference it used and why (`[reference]` lines and `diagnosis.md`). **A song is not restored
+against the generic profile on your own:** when the studio version cannot be found (no tags and no `--artist` /
+`--title`, no network, not on iTunes, or its passage not found in the recording), `analyze` and `auto` stop with
+exit code 4, before the slow steps when they can.
+
+- Ask the user for the artist and title, then pass `--artist` / `--title`.
+- Without internet, or not on iTunes: ask for the studio track (any copy, or 30 s of it):
+  `profile --name S --files STUDIO --song --out S.json`, then `--music-profile S.json`.
+- Only if the user says there is no studio version (an arrangement, a cover, unreleased) or accepts a generic target:
+  `--generic-reference "<what the user said>"`. `review.md` keeps that reason; tell the listener the tone follows a
+  genre average.
+
+Why: given an untagged song, an assistant that went on with the generic profile delivered a different tone from one
+that passed the title and used the studio version.
 
 ### 2. Check the environment
 
